@@ -1,0 +1,170 @@
+<app-layout>
+  <main class="reports-page">
+    <header class="page-toolbar">
+      <div>
+        <h1>{{ team()?.name ?? 'Takım raporları' }}</h1>
+        <p>Bu takımın görev durumu ve kategori kullanımı özeti.</p>
+      </div>
+      @if (teamId()) {
+        <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">Panoya dön</a>
+      }
+    </header>
+
+    @if (loading()) {
+      <div class="state-box">Rapor yükleniyor...</div>
+    } @else if (error()) {
+      <div class="state-box error">{{ error() }}</div>
+    } @else if (report(); as data) {
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span class="card-label">Aktif görev</span>
+          <strong class="card-value">{{ data.activeTaskCount }}</strong>
+        </article>
+
+        <article class="summary-card">
+          <span class="card-label">Tamamlanan görev</span>
+          <strong class="card-value">{{ data.completedTaskCount }}</strong>
+        </article>
+
+        <article class="summary-card">
+          <span class="card-label">Toplam görev</span>
+          <strong class="card-value">{{ totalTasks() }}</strong>
+        </article>
+
+        <button
+          type="button"
+          class="summary-card clickable danger"
+          (click)="openTasksModal('Süresi geçen görevler', data.overdueTasks)"
+        >
+          <span class="card-label">Süresi geçen görev</span>
+          <strong class="card-value">{{ data.overdueTaskCount }}</strong>
+        </button>
+
+        <button
+          type="button"
+          class="summary-card clickable warning"
+          (click)="openTasksModal('Bitiş tarihi yaklaşan görevler', data.upcomingTasks)"
+        >
+          <span class="card-label">Bitiş tarihi yaklaşan görevler</span>
+          <strong class="card-value">{{ data.upcomingTaskCount }}</strong>
+        </button>
+
+        <article class="summary-card">
+          <span class="card-label">En çok kullanılan kategori</span>
+          <strong class="card-value text">{{ data.mostUsedCategoryName || 'Henüz kategori yok' }}</strong>
+        </article>
+      </section>
+
+      <section class="charts-grid">
+        <section class="progress-card">
+          <div class="progress-head">
+            <h2>Tamamlanma oranı</h2>
+            <span>{{ completionRate() }}%</span>
+          </div>
+          <div class="pie-wrap">
+            <div
+              class="pie-chart"
+              [style.--completion-rate]="completionRate()"
+              role="img"
+              [attr.aria-label]="'Tamamlanma oranı yüzde ' + completionRate()"
+            >
+              <div class="pie-inner">
+                <strong>{{ completionRate() }}%</strong>
+                <span>Tamamlandı</span>
+              </div>
+            </div>
+
+            <div class="pie-legend">
+              <div class="legend-item">
+                <span class="legend-dot complete"></span>
+                <span>{{ data.completedTaskCount }} tamamlanan</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot active"></span>
+                <span>{{ data.activeTaskCount }} aktif</span>
+              </div>
+            </div>
+          </div>
+          <p class="progress-note">
+            {{ data.completedTaskCount }} / {{ totalTasks() }} görev tamamlanmış durumda.
+          </p>
+        </section>
+
+        <section class="progress-card">
+          <div class="progress-head">
+            <h2>Öncelik dağılımı</h2>
+            <span>{{ priorityTotal() }} görev</span>
+          </div>
+          <div class="pie-wrap">
+            <div
+              class="pie-chart"
+              [style.background]="priorityGradient()"
+              role="img"
+              aria-label="Görevlerin öncelik dağılımı"
+            >
+              <div class="pie-inner">
+                <strong>{{ priorityTotal() }}</strong>
+                <span>Toplam görev</span>
+              </div>
+            </div>
+
+            <div class="pie-legend">
+              <div class="legend-item">
+                <span class="legend-dot low"></span>
+                <span>{{ data.lowPriorityCount }} düşük</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot medium"></span>
+                <span>{{ data.mediumPriorityCount }} orta</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot high"></span>
+                <span>{{ data.highPriorityCount }} yüksek</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-dot critical"></span>
+                <span>{{ data.criticalPriorityCount }} kritik</span>
+              </div>
+            </div>
+          </div>
+          <p class="progress-note">
+            Takımdaki tüm görevlerin öncelik seviyelerine göre dağılımı.
+          </p>
+        </section>
+      </section>
+    }
+  </main>
+</app-layout>
+
+@if (showTasksModal()) {
+  <div class="modal-backdrop" (click)="closeTasksModal()">
+    <section class="modal-card tasks-modal" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>{{ tasksModalTitle() }}</h2>
+        <button type="button" class="icon-btn" (click)="closeTasksModal()" aria-label="Kapat">×</button>
+      </div>
+
+      @if (tasksModalItems().length === 0) {
+        <p class="tasks-empty">Görev yok.</p>
+      } @else {
+        <ul class="tasks-modal-list">
+          @for (task of tasksModalItems(); track task.id) {
+            <li class="tasks-modal-item">
+              <div class="tasks-modal-main">
+                <strong>{{ task.title }}</strong>
+                <div class="tasks-modal-meta">
+                  @if (task.boardColumnTitle) {
+                    <span class="mini-badge">{{ task.boardColumnTitle }}</span>
+                  }
+                  @if (task.dueDate) {
+                    <span class="mini-date">{{ task.dueDate | date: 'dd MMM yyyy' }}</span>
+                  }
+                </div>
+              </div>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+  </div>
+}

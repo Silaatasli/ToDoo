@@ -1,0 +1,106 @@
+<app-layout>
+  <main class="teams-page">
+    <header class="page-toolbar">
+      <div>
+        <h1>Takımlarım</h1>
+        <p>Ekiplerine göz at veya yeni bir pano oluştur.</p>
+      </div>
+      <button type="button" class="primary-btn" (click)="openCreateModal()">Oluştur</button>
+    </header>
+
+    @if (loading()) {
+      <div class="state-box">Takımlar yükleniyor...</div>
+    } @else if (error()) {
+      <div class="state-box error">{{ error() }}</div>
+    } @else if (teams().length === 0) {
+      <div class="empty-state">
+        <h2>Henüz takımın yok</h2>
+        <p>İlk ekibini oluşturup Kanban panosuna başlayabilirsin.</p>
+        <button type="button" class="primary-btn" (click)="openCreateModal()">İlk takımını oluştur</button>
+      </div>
+    } @else {
+      <div class="team-grid">
+        @for (team of teams(); track team.id) {
+          <a class="team-card" [routerLink]="['/teams', team.id, 'board']">
+            <div class="team-card-head">
+              <span class="team-avatar">{{ teamInitial(team.name) }}</span>
+              <div class="team-card-title">
+                <h2>{{ team.name }}</h2>
+                @if (isLeader(team)) {
+                  <span class="badge">Lider</span>
+                }
+              </div>
+            </div>
+            <div class="team-card-meta">
+              <span>{{ team.memberCount }} üye</span>
+              <span class="dot">·</span>
+              <span>{{ team.leaderEmail }}</span>
+            </div>
+          </a>
+        }
+      </div>
+    }
+  </main>
+</app-layout>
+
+@if (showCreateModal()) {
+  <div class="modal-backdrop" (click)="closeCreateModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Yeni takım</h2>
+        <button type="button" class="icon-btn" (click)="closeCreateModal()" aria-label="Kapat">×</button>
+      </div>
+
+      <p class="modal-subtitle">Takım adını gir.</p>
+
+      <form [formGroup]="createForm" (ngSubmit)="submitCreate()">
+        <label class="field">
+          <span>Takım adı</span>
+          <input type="text" formControlName="name" placeholder="Örn. Dev Squad" maxlength="200" />
+        </label>
+
+        <div class="field">
+          <span>Pano sütunları</span>
+          <p class="field-hint">Varsayılan sütunlar hazır. İstersen adlarını değiştir, ekle veya kaldır.</p>
+
+          <div class="column-fields" formArrayName="columns">
+            @for (control of columns.controls; track $index) {
+              <div class="column-field-row">
+                <input
+                  type="text"
+                  [formControlName]="$index"
+                  placeholder="Sütun adı"
+                  maxlength="100"
+                />
+                <button
+                  type="button"
+                  class="remove-column-btn"
+                  (click)="removeColumnField($index)"
+                  [disabled]="columns.length <= 1"
+                  aria-label="Sütunu kaldır"
+                >
+                  ×
+                </button>
+              </div>
+            }
+          </div>
+
+          <button type="button" class="add-column-btn" (click)="addColumnField()">+ Sütun ekle</button>
+        </div>
+
+        @if (createError()) {
+          <p class="error-box">{{ createError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeCreateModal()" [disabled]="creating()">
+            İptal
+          </button>
+          <button type="submit" class="primary-btn" [disabled]="creating()">
+            {{ creating() ? 'Oluşturuluyor...' : 'Oluştur' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}

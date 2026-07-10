@@ -1,0 +1,377 @@
+.reports-page {
+  min-height: 100%;
+  background: #fff;
+  padding: 1.25rem 1.5rem 2rem;
+}
+
+.page-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ebecf0;
+
+  h1 {
+    margin: 0;
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: #172b4d;
+  }
+
+  p {
+    margin: 0.3rem 0 0;
+    color: #6b778c;
+    font-size: 0.875rem;
+  }
+}
+
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid #dfe1e6;
+  border-radius: 4px;
+  background: #fff;
+  color: #44546f;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+
+  &:hover {
+    background: #f4f5f7;
+  }
+}
+
+.state-box {
+  padding: 1rem;
+  border-radius: 4px;
+  background: #f4f5f7;
+  border: 1px solid #dfe1e6;
+  color: #6b778c;
+  font-size: 0.9rem;
+
+  &.error {
+    color: var(--error);
+    background: var(--error-bg);
+    border-color: #fecaca;
+  }
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.summary-card,
+.progress-card {
+  background: #fff;
+  border: 1px solid #dfe1e6;
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  box-shadow: 0 6px 18px rgba(9, 30, 66, 0.04);
+}
+
+.summary-card {
+  text-align: left;
+
+  &.clickable {
+    width: 100%;
+    cursor: pointer;
+    transition: border-color 0.12s ease, transform 0.12s ease, box-shadow 0.12s ease;
+
+    &:hover {
+      transform: translateY(-1px);
+      border-color: #c7d0da;
+      box-shadow: 0 10px 24px rgba(9, 30, 66, 0.08);
+    }
+  }
+
+  &.danger .card-value {
+    color: var(--error);
+  }
+
+  &.warning .card-value {
+    color: #c06a00;
+  }
+}
+
+.card-label {
+  display: block;
+  color: #6b778c;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.45rem;
+}
+
+.card-value {
+  display: block;
+  font-size: 1.8rem;
+  line-height: 1.1;
+  color: #172b4d;
+
+  &.text {
+    font-size: 1rem;
+    line-height: 1.4;
+  }
+}
+
+.progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1rem;
+    color: #172b4d;
+  }
+
+  span {
+    font-size: 1rem;
+    font-weight: 700;
+    color: var(--primary);
+  }
+}
+
+.pie-wrap {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.pie-chart {
+  --completion-angle: calc(var(--completion-rate, 0) * 3.6deg);
+  width: 168px;
+  height: 168px;
+  border-radius: 50%;
+  background:
+    conic-gradient(
+      var(--primary) 0deg var(--completion-angle),
+      #e6eaef var(--completion-angle) 360deg
+    );
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.pie-inner {
+  width: 108px;
+  height: 108px;
+  border-radius: 50%;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px #eef1f4;
+
+  strong {
+    font-size: 1.4rem;
+    line-height: 1;
+    color: #172b4d;
+  }
+
+  span {
+    margin-top: 0.3rem;
+    font-size: 0.74rem;
+    font-weight: 600;
+    color: #6b778c;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+}
+
+.pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #44546f;
+  font-size: 0.9rem;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.complete {
+    background: var(--primary);
+  }
+
+  &.active {
+    background: #cfd6de;
+  }
+
+  &.low {
+    background: #2f9e44;
+  }
+
+  &.medium {
+    background: #1971c2;
+  }
+
+  &.high {
+    background: #f08c00;
+  }
+
+  &.critical {
+    background: #e03131;
+  }
+}
+
+.progress-note {
+  margin: 0.75rem 0 0;
+  color: #6b778c;
+  font-size: 0.88rem;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 30, 66, 0.4);
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  z-index: 200;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 520px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #dfe1e6;
+  padding: 1.25rem;
+  box-shadow: 0 12px 28px rgba(9, 30, 66, 0.18);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: #172b4d;
+  }
+}
+
+.icon-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 4px;
+  background: #f4f5f7;
+  color: #6b778c;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    background: #ebecf0;
+  }
+}
+
+.tasks-empty {
+  margin: 0;
+  color: #97a0af;
+  font-size: 0.9rem;
+}
+
+.tasks-modal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.tasks-modal-item {
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tasks-modal-main {
+  strong {
+    display: block;
+    color: #172b4d;
+    font-size: 0.92rem;
+    line-height: 1.35;
+  }
+}
+
+.tasks-modal-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.45rem;
+}
+
+.mini-badge {
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  background: var(--primary-soft);
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.mini-date {
+  padding: 0.12rem 0.42rem;
+  border-radius: 999px;
+  background: #f4f5f7;
+  color: #6b778c;
+  font-size: 0.72rem;
+}
+
+@media (max-width: 720px) {
+  .page-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pie-wrap {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

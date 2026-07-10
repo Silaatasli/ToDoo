@@ -1,0 +1,71 @@
+<div class="layout" [class.collapsed]="collapsed()">
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <a class="brand" routerLink="/teams">
+        <span class="brand-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+            <path d="M9 11l3 3L22 4" />
+            <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+          </svg>
+        </span>
+        <span class="brand-text">To<span class="accent">Doo</span></span>
+      </a>
+
+      <button
+        type="button"
+        class="sidebar-toggle"
+        [class.is-collapsed]="collapsed()"
+        (click)="toggleSidebar()"
+        [attr.aria-label]="collapsed() ? 'Menüyü genişlet' : 'Menüyü daralt'"
+        [title]="collapsed() ? 'Menüyü genişlet' : 'Menüyü daralt'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="7" y1="5" x2="7" y2="19" />
+          <polyline points="17 8 13 12 17 16" />
+        </svg>
+      </button>
+    </div>
+
+    <nav class="side-nav">
+      <a
+        routerLink="/teams"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: true }"
+        class="side-link"
+      >
+        <span class="side-icon" aria-hidden="true">▦</span>
+        <span class="side-text">Takımlarım</span>
+      </a>
+    </nav>
+
+    <div class="side-section">
+      <p class="side-label">Takımlar</p>
+      <div class="team-links">
+        @for (team of teams(); track team.id) {
+          <a class="team-link" [routerLink]="['/teams', team.id, 'board']" routerLinkActive="active">
+            <span class="team-dot">{{ teamInitial(team.name) }}</span>
+            <span class="team-name">{{ team.name }}</span>
+          </a>
+        } @empty {
+          <p class="side-empty">Henüz takım yok</p>
+        }
+      </div>
+    </div>
+
+  </aside>
+
+  <div class="main-panel">
+    <header class="main-header">
+      <div class="header-actions">
+        <a class="user-chip" routerLink="/profile" title="Profilim">
+          <span class="user-chip-avatar">{{ teamInitial(displayName()) }}</span>
+          <span class="user-email">{{ displayName() }}</span>
+        </a>
+        <button type="button" class="logout-btn" (click)="logout()">Çıkış</button>
+      </div>
+    </header>
+    <div class="main-content">
+      <ng-content />
+    </div>
+  </div>
+</div>

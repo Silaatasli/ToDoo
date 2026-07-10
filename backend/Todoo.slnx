@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="Todoo.Business/Todoo.Business.csproj" />
+  <Project Path="Todoo.DataAccess/Todoo.DataAccess.csproj" />
+  <Project Path="Todoo.Entities/Todoo.Entities.csproj" />
+  <Project Path="Todoo.WebApi/Todoo.WebApi.csproj" />
+</Solution>

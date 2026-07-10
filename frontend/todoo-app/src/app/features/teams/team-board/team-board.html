@@ -1,0 +1,811 @@
+<app-layout>
+  <main class="board-page">
+    <header class="board-toolbar">
+      <div class="board-title">
+        <h1>{{ board()?.teamName ?? 'Takım panosu' }}</h1>
+        @if (team()) {
+          <div class="assignee-filter">
+            <button
+              type="button"
+              class="assignee-filter-trigger"
+              [class.active]="assigneeFilter() !== 'all'"
+              [attr.aria-expanded]="showAssigneeFilterMenu()"
+              title="Atanan kişiye göre filtrele"
+              (click)="$event.stopPropagation(); toggleAssigneeFilterMenu()"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 5h18" />
+                <path d="M7 12h10" />
+                <path d="M10 19h4" />
+              </svg>
+            
+            </button>
+
+            <div class="member-chips" role="group" aria-label="Hızlı atanan kişi filtresi">
+              <button
+                type="button"
+                class="chip-avatar unassigned"
+                [class.selected]="isUnassignedFilterActive()"
+                [title]="
+                  isUnassignedFilterActive()
+                    ? 'Atanmamış görev filtresini kaldır'
+                    : 'Atanmamış görevleri filtrele'
+                "
+                [attr.aria-pressed]="isUnassignedFilterActive()"
+                (click)="toggleUnassignedFilter()"
+              >
+                —
+              </button>
+              @for (m of team()!.members; track m.userId) {
+                <button
+                  type="button"
+                  class="chip-avatar"
+                  [class.leader]="m.isLeader"
+                  [class.selected]="isAssigneeFilterActive(m.userId)"
+                  [title]="
+                    isAssigneeFilterActive(m.userId)
+                      ? memberName(m) + ' filtresini kaldır'
+                      : memberName(m) + ' kişisine atanan görevleri filtrele'
+                  "
+                  [attr.aria-pressed]="isAssigneeFilterActive(m.userId)"
+                  (click)="toggleAssigneeFilter(m.userId)"
+                >
+                  {{ initial(memberName(m)) }}
+                </button>
+              }
+            </div>
+
+            @if (showAssigneeFilterMenu()) {
+              <div class="assignee-filter-menu" (click)="$event.stopPropagation()">
+                <button
+                  type="button"
+                  class="assignee-filter-option"
+                  [class.active]="assigneeFilter() === 'all'"
+                  (click)="selectAssigneeFilter('all')"
+                >
+                  Tüm görevler
+                </button>
+                <button
+                  type="button"
+                  class="assignee-filter-option"
+                  [class.active]="isUnassignedFilterActive()"
+                  (click)="selectAssigneeFilter('unassigned')"
+                >
+                  <span class="menu-avatar unassigned">—</span>
+                  <span class="menu-label">Atanmamış görevler</span>
+                </button>
+                @for (m of team()!.members; track m.userId) {
+                  <button
+                    type="button"
+                    class="assignee-filter-option"
+                    [class.active]="isAssigneeFilterActive(m.userId)"
+                    (click)="selectAssigneeFilter(m.userId)"
+                  >
+                    <span class="menu-avatar">{{ initial(memberName(m)) }}</span>
+                    <span class="menu-label">{{ memberName(m) }}</span>
+                    @if (m.isLeader) {
+                      <span class="menu-badge">Lider</span>
+                    }
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="board-actions">
+        @if (teamId()) {
+          <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'reports']">Reports</a>
+        }
+        <button type="button" class="secondary-btn" (click)="openMembersModal()">Üyeler</button>
+        @if (isLeader()) {
+          <button type="button" class="danger-btn" (click)="deleteTeam()" [disabled]="deletingTeam()">
+            {{ deletingTeam() ? 'Siliniyor...' : 'Takımı sil' }}
+          </button>
+        }
+      </div>
+    </header>
+
+    @if (isUnassignedFilterActive()) {
+      <div class="assignee-filter-bar">
+        <span>Atanmamış {{ filteredTaskCount() }} görev gösteriliyor</span>
+        <button type="button" class="link-btn" (click)="clearAssigneeFilter()">Tümünü göster</button>
+      </div>
+    } @else if (assigneeFilterMember(); as filterMember) {
+      <div class="assignee-filter-bar">
+        <div class="assignee-filter-bar-text">
+          @if (showPendingOnlyFilter()) {
+            <span>{{ memberName(filterMember) }} için onay bekleyen {{ filteredTaskCount() }} görev gösteriliyor</span>
+          } @else {
+            <span>{{ memberName(filterMember) }} kişisine atanan {{ filteredTaskCount() }} görev gösteriliyor</span>
+            @if (filteredPendingTaskCount() > 0) {
+              <span class="assignee-filter-pending-note">{{ filteredPendingTaskCount() }} görev onay bekliyor</span>
+            }
+          }
+        </div>
+        <div class="assignee-filter-bar-actions">
+          @if (filteredPendingTaskCount() > 0) {
+            <button type="button" class="link-btn" (click)="togglePendingOnlyFilter()">
+              {{ showPendingOnlyFilter() ? 'Tüm atanan görevler' : 'Sadece onay bekleyenler' }}
+            </button>
+          }
+          <button type="button" class="link-btn" (click)="clearAssigneeFilter()">Tümünü göster</button>
+        </div>
+      </div>
+    }
+
+    @if (loading()) {
+      <div class="state-box">Pano yükleniyor...</div>
+    } @else if (error()) {
+      <div class="state-box error">{{ error() }}</div>
+    } @else if (filteredBoard()) {
+      <div class="board-columns">
+        @for (column of filteredBoard()!.columns; track column.id) {
+          <section
+            class="column"
+            [class.drag-over]="dragOverColumnId() === column.id"
+            [class.column-reorder-over]="dragOverReorderColumnId() === column.id"
+            (dragover)="onDragOver($event, column.id)"
+            (dragleave)="onColumnDragLeave(column.id)"
+            (drop)="onDrop($event, column)"
+          >
+            <header
+              class="column-head"
+              [class.draggable]="isLeader() && editingColumnId() !== column.id"
+              [attr.draggable]="isLeader() && editingColumnId() !== column.id ? 'true' : null"
+              (dragstart)="onColumnDragStart(column.id)"
+              (dragend)="onColumnDragEnd()"
+            >
+              @if (editingColumnId() === column.id) {
+                <form class="column-edit" [formGroup]="editColumnForm" (ngSubmit)="saveColumnEdit(column)">
+                  <input
+                    type="text"
+                    formControlName="title"
+                    maxlength="100"
+                    autocomplete="off"
+                    (keydown.escape)="cancelEditColumn()"
+                  />
+                  <button type="submit" class="col-edit-action save" [disabled]="savingColumnEdit()" title="Kaydet">✓</button>
+                  <button
+                    type="button"
+                    class="col-edit-action"
+                    (click)="cancelEditColumn()"
+                    [disabled]="savingColumnEdit()"
+                    title="İptal"
+                  >×</button>
+                </form>
+              } @else {
+                <h2>{{ column.title }}</h2>
+                <div class="column-head-right">
+                  <span class="column-count">{{ column.tasks.length }}</span>
+                  @if (isLeader()) {
+                    <button
+                      type="button"
+                      class="column-edit-btn"
+                      (click)="startEditColumn(column)"
+                      title="Sütun adını düzenle"
+                      aria-label="Sütun adını düzenle"
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                        <path d="M12 20h9" />
+                        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                      </svg>
+                    </button>
+                  }
+                </div>
+              }
+            </header>
+            @if (editingColumnId() === column.id && editColumnError()) {
+              <p class="column-edit-error">{{ editColumnError() }}</p>
+            }
+
+            <div class="column-body">
+              @for (remote of remoteDropPreviews(column.id); track remote.userId) {
+                @if (taskById(remote.taskId); as remoteTask) {
+                  <article class="task-card remote-drag-preview" aria-hidden="true">
+                    <span class="remote-drag-badge">{{ remoteDragLabel(remote.userId) }} taşıyor</span>
+                    <div class="task-top">
+                      <span class="priority-badge" [class]="priorityClass(remoteTask.priority)">
+                        {{ priorityLabel(remoteTask.priority) }}
+                      </span>
+                    </div>
+                    <p class="task-title">{{ remoteTask.title }}</p>
+                    @if (remoteTask.description) {
+                      <p class="task-desc">{{ remoteTask.description }}</p>
+                    }
+                  </article>
+                }
+              }
+
+              @for (task of column.tasks; track task.id) {
+                @if (!isRemoteDraggingTask(task.id, column.id)) {
+                  <article
+                    class="task-card"
+                    [class.completed]="task.isCompleted"
+                    [class.pending-assignment]="isAssignmentPending(task)"
+                    [class.dragging]="draggedTaskId() === task.id"
+                    [class.remote-dragging]="remoteDragInPlace(task.id)"
+                    draggable="true"
+                    (dragstart)="onDragStart($event, task)"
+                    (dragend)="onDragEnd()"
+                    (click)="openTaskDetail(task)"
+                  >
+                    @if (remoteDragInPlace(task.id); as remoteDrag) {
+                      <span class="remote-drag-badge">{{ remoteDragLabel(remoteDrag.userId) }} taşıyor</span>
+                    }
+                    @if (isAssignmentPending(task)) {
+                      <span class="assignment-pending-badge">Onay bekliyor</span>
+                    }
+                    <div class="task-top">
+                      <span class="priority-badge" [class]="priorityClass(task.priority)">
+                        {{ priorityLabel(task.priority) }}
+                      </span>
+                      <div class="task-menu">
+
+                        <button
+                          type="button"
+                          class="task-action"
+                          (click)="$event.stopPropagation(); deleteTask(task)"
+                          title="Sil"
+                        >×</button>
+                      </div>
+                    </div>
+
+                    <p class="task-title">{{ task.title }}</p>
+                    @if (task.description) {
+                      <p class="task-desc">{{ task.description }}</p>
+                    }
+
+                    <div class="task-meta">
+                      @if (task.categoryName) {
+                        <span class="task-category">{{ task.categoryName }}</span>
+                      }
+                      @if (task.dueDate) {
+                        <span class="task-due">{{ task.dueDate | date: 'dd MMM' }}</span>
+                      }
+                      @if (task.assignedToEmail) {
+                        <span class="task-assignee" [title]="task.assignedToEmail">
+                          {{ initial(task.assignedToEmail) }}
+                        </span>
+                      }
+                    </div>
+                  </article>
+                }
+              } @empty {
+                @if (remoteDropPreviews(column.id).length === 0) {
+                  <p class="column-empty">Görev yok</p>
+                }
+              }
+            </div>
+
+            <button type="button" class="add-task-btn" (click)="openTaskModal(column.id)">+ Görev ekle</button>
+          </section>
+        }
+
+        @if (isLeader()) {
+          <button type="button" class="add-column" (click)="openColumnModal()">+ Sütun ekle</button>
+        }
+      </div>
+    }
+  </main>
+</app-layout>
+
+@if (showColumnModal()) {
+  <div class="modal-backdrop" (click)="closeColumnModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Yeni sütun</h2>
+        <button type="button" class="icon-btn" (click)="closeColumnModal()" aria-label="Kapat">×</button>
+      </div>
+
+      <form [formGroup]="columnForm" (ngSubmit)="submitColumn()">
+        <label class="field">
+          <span>Sütun başlığı</span>
+          <input type="text" formControlName="title" placeholder="Örn. İncelemede" maxlength="100" />
+        </label>
+
+        @if (columnError()) {
+          <p class="error-box">{{ columnError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeColumnModal()" [disabled]="savingColumn()">
+            İptal
+          </button>
+          <button type="submit" class="primary-btn" [disabled]="savingColumn()">
+            {{ savingColumn() ? 'Ekleniyor...' : 'Ekle' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (showTaskModal()) {
+  <div class="modal-backdrop" (click)="closeTaskModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Yeni görev</h2>
+        <button type="button" class="icon-btn" (click)="closeTaskModal()" aria-label="Kapat">×</button>
+      </div>
+
+      <form [formGroup]="taskForm" (ngSubmit)="submitTask()">
+        <label class="field">
+          <span>Başlık</span>
+          <input type="text" formControlName="title" placeholder="Görev başlığı" maxlength="200" />
+        </label>
+
+        <label class="field">
+          <span>Açıklama</span>
+          <textarea formControlName="description" rows="3" placeholder="İsteğe bağlı"></textarea>
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span>Öncelik</span>
+            <select formControlName="priority">
+              @for (option of priorityOptions; track option.value) {
+                <option [value]="option.value">{{ option.label }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Kategori</span>
+            <select formControlName="categoryId">
+              <option value="">Kategori yok</option>
+              @for (category of categories(); track category.id) {
+                <option [value]="category.id">{{ category.name }}</option>
+              }
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Bitiş tarihi</span>
+            <input type="date" formControlName="dueDate" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Atanan kişi</span>
+          <select formControlName="assignedToUserId">
+            <option value="">Atanmadı</option>
+            @for (m of team()?.members ?? []; track m.userId) {
+              <option [value]="m.userId">{{ m.email }}</option>
+            }
+          </select>
+        </label>
+
+        @if (taskError()) {
+          <p class="error-box">{{ taskError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeTaskModal()" [disabled]="savingTask()">
+            İptal
+          </button>
+          <button type="submit" class="primary-btn" [disabled]="savingTask()">
+            {{ savingTask() ? 'Ekleniyor...' : 'Ekle' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (showMembersModal()) {
+  <div class="modal-backdrop" (click)="closeMembersModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Takım üyeleri</h2>
+        <button type="button" class="icon-btn" (click)="closeMembersModal()" aria-label="Kapat">×</button>
+      </div>
+
+      <ul class="member-list">
+        @for (m of team()?.members ?? []; track m.userId) {
+          <li class="member-row">
+            <a class="member-main" [routerLink]="['/profile', m.userId]" title="Profili gör">
+              <span class="member-avatar">{{ initial(memberName(m)) }}</span>
+              <div class="member-info">
+                <span class="member-email">{{ memberName(m) }}</span>
+                @if (m.isLeader) {
+                  <span class="badge">Lider</span>
+                }
+              </div>
+            </a>
+            @if (isLeader() && !m.isLeader) {
+              <button type="button" class="link-danger" (click)="removeMember(m.userId)">Çıkar</button>
+            }
+          </li>
+        }
+      </ul>
+
+      @if (isLeader()) {
+        <form [formGroup]="memberForm" (ngSubmit)="submitMember()" class="member-form">
+          <label class="field member-search-field">
+            <span>Üye ekle</span>
+            <div class="member-search" (click)="$event.stopPropagation()">
+              <div class="inline-add">
+                <input
+                  type="search"
+                  formControlName="searchQuery"
+                  placeholder="Ad soyad ile ara (en az 3 harf)"
+                  autocomplete="off"
+                  (input)="onMemberSearchInput()"
+                  (focus)="onMemberSearchFocus()"
+                />
+                <button
+                  type="submit"
+                  class="primary-btn"
+                  [disabled]="savingMember() || memberForm.controls.email.invalid"
+                >
+                  {{ savingMember() ? '...' : 'Ekle' }}
+                </button>
+              </div>
+
+              @if (showMemberSearchResults() && memberForm.controls.searchQuery.value.trim().length >= 3) {
+                <div class="member-search-results">
+                  @if (memberSearchLoading()) {
+                    <p class="member-search-hint">Aranıyor...</p>
+                  } @else if (memberSearchResults().length === 0) {
+                    <p class="member-search-hint">Eşleşen kullanıcı bulunamadı.</p>
+                  } @else {
+                    <ul class="member-search-list">
+                      @for (user of memberSearchResults(); track user.id) {
+                        <li>
+                          <button type="button" class="member-search-option" (click)="selectMemberFromSearch(user)">
+                            <span class="member-avatar">{{ initial(user.displayName) }}</span>
+                            <span class="member-search-info">
+                              <span class="member-search-name">{{ user.displayName }}</span>
+                              <span class="member-search-email">{{ user.email }}</span>
+                            </span>
+                          </button>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </div>
+              }
+            </div>
+          </label>
+
+          @if (memberError()) {
+            <p class="error-box">{{ memberError() }}</p>
+          }
+        </form>
+      }
+    </section>
+  </div>
+}
+
+@if (showDetailModal()) {
+  <div class="modal-backdrop" (click)="closeDetailModal()">
+    <section class="modal-card jira-detail-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        @if (detail(); as headerTask) {
+          <div class="detail-header-meta">
+            <span class="detail-issue-key">Görev #{{ headerTask.id }}</span>
+            <span class="detail-column-chip">{{ headerTask.boardColumnTitle }}</span>
+          </div>
+        } @else {
+          <h2>Görev detayı</h2>
+        }
+        <button type="button" class="icon-btn" (click)="closeDetailModal()" aria-label="Kapat">×</button>
+      </div>
+
+      @if (detailLoading()) {
+        <div class="state-box">Yükleniyor...</div>
+      } @else if (detailError()) {
+        <div class="state-box error">{{ detailError() }}</div>
+      } @else if (detail(); as d) {
+        @if (detailEditing()) {
+          <form [formGroup]="detailForm" (ngSubmit)="saveDetail()">
+            <label class="field">
+              <span>Başlık</span>
+              <input type="text" formControlName="title" maxlength="200" />
+            </label>
+
+            <label class="field">
+              <span>Açıklama</span>
+              <textarea formControlName="description" rows="3" placeholder="İsteğe bağlı"></textarea>
+            </label>
+
+            <div class="field-row">
+              <label class="field">
+                <span>Başlangıç</span>
+                <input type="date" formControlName="startDate" />
+              </label>
+           <label class="field">
+              <span>Bitiş</span>
+              <input type="date" formControlName="dueDate" />
+            </label> </div>
+            <label class="field">
+                <span>Öncelik</span>
+                <select formControlName="priority">
+                  @for (option of priorityOptions; track option.value) {
+                    <option [value]="option.value">{{ option.label }}</option>
+                  }
+                </select>
+              </label>
+
+            <div class="field">
+              <span class="field-label-row">
+                <span>Kategori</span>
+                <button type="button" class="link-btn" (click)="toggleNewCategory()">
+                  {{ showNewCategory() ? 'Vazgeç' : '+ Yeni kategori' }}
+                </button>
+              </span>
+              @if (showNewCategory()) {
+                <div class="inline-add">
+                  <input type="text" [formControl]="newCategoryControl" placeholder="Yeni kategori adı" maxlength="100" />
+                  <button type="button" class="primary-btn" (click)="createCategoryInline()" [disabled]="creatingCategory()">
+                    {{ creatingCategory() ? '...' : 'Ekle' }}
+                  </button>
+                </div>
+                @if (newCategoryError()) {
+                  <p class="inline-error">{{ newCategoryError() }}</p>
+                }
+              } @else {
+                <select formControlName="categoryId">
+                  <option value="">Kategori yok</option>
+                  @for (category of categories(); track category.id) {
+                    <option [value]="category.id">{{ category.name }}</option>
+                  }
+                </select>
+              }
+            </div>
+
+            
+
+            @if (detailSaveError()) {
+              <p class="error-box">{{ detailSaveError() }}</p>
+            }
+
+            <div class="modal-actions">
+              <button type="button" class="secondary-btn" (click)="cancelDetailEdit()" [disabled]="savingDetail()">
+                İptal
+              </button>
+              <button type="submit" class="primary-btn" [disabled]="savingDetail()">
+                {{ savingDetail() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+          </form>
+        } @else {
+          <div class="jira-detail-layout">
+            <aside class="jira-preview-pane">
+              <div class="preview-stage">
+                @if (taskAttachmentsLoading()) {
+                  <div class="preview-empty">
+                    <span class="preview-empty-icon" aria-hidden="true">⏳</span>
+                    <p>Ekler yükleniyor...</p>
+                  </div>
+                } @else if (selectedAttachment(); as active) {
+                  @if (isImageAttachment(active) && attachmentPreviewUrl(active.id); as previewUrl) {
+                    <img [src]="previewUrl" [alt]="active.fileName" class="preview-image" />
+                  } @else if (isPdfAttachment(active) && attachmentPreviewUrl(active.id); as previewUrl) {
+                    <iframe [src]="previewUrl" class="preview-pdf" [title]="active.fileName"></iframe>
+                  } @else {
+                    <div class="preview-file-card">
+                      <span class="preview-file-icon" aria-hidden="true">📄</span>
+                      <p class="preview-file-name">{{ active.fileName }}</p>
+                      <p class="preview-file-meta">{{ attachmentKindLabel(active) }} · {{ formatFileSize(active.sizeBytes) }}</p>
+                      <button type="button" class="primary-btn" (click)="downloadAttachmentFile(active)">İndir</button>
+                    </div>
+                  }
+                } @else {
+                  <label class="preview-dropzone">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                      (change)="onAttachmentSelected($event)"
+                      [disabled]="uploadingAttachment()"
+                    />
+                    <span class="preview-empty-icon" aria-hidden="true">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M8 12v5a3 3 0 0 0 6 0V7a2 2 0 0 0-4 0v7" />
+                      </svg>
+                    </span>
+                    <p>Dosya ekleyin</p>
+                    <span class="preview-dropzone-cta">
+                      {{ uploadingAttachment() ? 'Yükleniyor...' : 'Tıklayın veya sürükleyip bırakın' }}
+                    </span>
+                  </label>
+                }
+              </div>
+
+              <div class="preview-toolbar">
+                <span class="preview-toolbar-title">Ekler ({{ taskAttachments().length }})</span>
+                <label class="upload-btn upload-btn-compact">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                    (change)="onAttachmentSelected($event)"
+                    [disabled]="uploadingAttachment()"
+                  />
+                  {{ uploadingAttachment() ? '...' : '+ Ekle' }}
+                </label>
+              </div>
+
+              @if (attachmentError()) {
+                <p class="inline-error preview-error">{{ attachmentError() }}</p>
+              }
+
+              @if (taskAttachments().length > 0) {
+                <div class="preview-thumbs" role="listbox" aria-label="Ek önizlemeleri">
+                  @for (attachment of taskAttachments(); track attachment.id) {
+                    <button
+                      type="button"
+                      class="preview-thumb"
+                      [class.selected]="selectedAttachmentId() === attachment.id"
+                      (click)="selectAttachment(attachment)"
+                      [attr.aria-selected]="selectedAttachmentId() === attachment.id"
+                    >
+                      @if (isImageAttachment(attachment) && attachmentPreviewUrl(attachment.id); as thumbUrl) {
+                        <img [src]="thumbUrl" [alt]="attachment.fileName" />
+                      } @else if (isPdfAttachment(attachment)) {
+                        <span class="preview-thumb-pdf">PDF</span>
+                      } @else {
+                        <span class="preview-thumb-file" aria-hidden="true">📄</span>
+                      }
+                    </button>
+                  }
+                </div>
+              }
+
+              @if (selectedAttachment(); as active) {
+                <div class="preview-footer">
+                  <div class="preview-footer-meta">
+                    <strong>{{ active.fileName }}</strong>
+                    <span>{{ formatFileSize(active.sizeBytes) }} · {{ active.uploadedByEmail }}</span>
+                  </div>
+                  <div class="preview-footer-actions">
+                    <button type="button" class="secondary-btn" (click)="downloadAttachmentFile(active)">İndir</button>
+                    @if (canDeleteAttachment(active)) {
+                      <button
+                        type="button"
+                        class="danger-btn"
+                        (click)="deleteAttachmentFile(active)"
+                        [disabled]="deletingAttachmentId() === active.id"
+                      >
+                        {{ deletingAttachmentId() === active.id ? '...' : 'Sil' }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              }
+            </aside>
+
+            <div class="jira-content-pane">
+              <div class="detail-view">
+                <div class="detail-title-row">
+                  <h3 [class.done]="d.isCompleted">{{ d.title }}</h3>
+                  <span class="priority-badge" [class]="priorityClass(d.priority)">{{ priorityLabel(d.priority) }}</span>
+                </div>
+
+                <section class="detail-section">
+                  <h4>Açıklama</h4>
+                  @if (d.description) {
+                    <p class="detail-desc">{{ d.description }}</p>
+                  } @else {
+                    <p class="detail-desc muted">Açıklama yok.</p>
+                  }
+                </section>
+
+                <section class="detail-section">
+                  <h4>Detaylar</h4>
+                  <dl class="detail-fields">
+                    <div class="detail-field">
+                      <dt>Durum</dt>
+                      <dd>{{ d.isCompleted ? 'Tamamlandı' : 'Devam ediyor' }}</dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Öncelik</dt>
+                      <dd>
+                        <span class="priority-badge inline" [class]="priorityClass(d.priority)">
+                          {{ priorityLabel(d.priority) }}
+                        </span>
+                      </dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Kategori</dt>
+                      <dd>{{ d.categoryName || '—' }}</dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Atanan</dt>
+                      <dd>
+                        <select
+                          class="detail-inline-select"
+                          (change)="changeAssignee($any($event.target).value)"
+                          [disabled]="assigning()"
+                        >
+                          <option value="" [selected]="d.assignedToUserId == null">Atanmadı</option>
+                          @for (m of team()?.members ?? []; track m.userId) {
+                            <option [value]="m.userId" [selected]="m.userId === d.assignedToUserId">
+                              {{ memberName(m) }}
+                            </option>
+                          }
+                        </select>
+                      </dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Başlangıç</dt>
+                      <dd>{{ d.startDate | date: 'dd MMM yyyy' }}</dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Bitiş</dt>
+                      <dd>{{ d.dueDate ? (d.dueDate | date: 'dd MMM yyyy') : '—' }}</dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Oluşturan</dt>
+                      <dd>{{ d.createdByEmail }}</dd>
+                    </div>
+                    <div class="detail-field">
+                      <dt>Oluşturma</dt>
+                      <dd>{{ d.createdDate | date: 'dd MMM yyyy' }}</dd>
+                    </div>
+                  </dl>
+                </section>
+
+                @if (canRespondToAssignment(d)) {
+                  <div class="assignment-response">
+                    <p class="assignment-response-note">Bu görev size atandı. Devam etmek için onaylayın veya reddedin.</p>
+                    <div class="assignment-response-actions">
+                      <button
+                        type="button"
+                        class="secondary-btn"
+                        (click)="declineAssignment(d)"
+                        [disabled]="respondingToAssignment()"
+                      >
+                        Reddet
+                      </button>
+                      <button
+                        type="button"
+                        class="primary-btn"
+                        (click)="acceptAssignment(d)"
+                        [disabled]="respondingToAssignment()"
+                      >
+                        {{ respondingToAssignment() ? 'İşleniyor...' : 'Onayla' }}
+                      </button>
+                    </div>
+                  </div>
+                } @else if (d.assignmentStatus === assignmentStatus.Pending) {
+                  <p class="assignment-status-note pending">Atanan kişinin onayı bekleniyor.</p>
+                }
+
+                <section class="detail-activity">
+                  <h4>Geçmiş</h4>
+                  @if (taskActivityLoading()) {
+                    <p class="activity-empty">Geçmiş yükleniyor...</p>
+                  } @else if (taskActivity().length === 0) {
+                    <p class="activity-empty">Bu görev için henüz bir kayıt yok.</p>
+                  } @else {
+                    <ul class="activity-list">
+                      @for (log of taskActivity(); track log.id) {
+                        <li class="activity-item">
+                          <span class="activity-dot" [class]="'act-' + log.actionType" aria-hidden="true"></span>
+                          <div class="activity-body">
+                            <p class="activity-text">{{ activityText(log) }}</p>
+                            <span class="activity-time">{{ toLocalDate(log.createdDate) | date: 'dd MMM yyyy, HH:mm' }}</span>
+                          </div>
+                        </li>
+                      }
+                    </ul>
+                  }
+                </section>
+
+                <div class="modal-actions detail-actions">
+                  <button type="button" class="danger-btn" (click)="deleteTask(d)">Sil</button>
+                  <button type="button" class="secondary-btn" (click)="toggleDetailComplete()">
+                    {{ d.isCompleted ? 'Geri aç' : 'Tamamla' }}
+                  </button>
+                  <button type="button" class="primary-btn" (click)="startDetailEdit()">Düzenle</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        }
+      }
+    </section> 
+  </div>
+}

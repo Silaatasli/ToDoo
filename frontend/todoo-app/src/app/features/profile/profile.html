@@ -1,0 +1,82 @@
+<app-layout>
+  <main class="profile-page">
+    @if (loading()) {
+      <div class="state-box">Profil yükleniyor...</div>
+    } @else if (error()) {
+      <div class="state-box error">{{ error() }}</div>
+    } @else if (profile(); as p) {
+      <section class="profile-card">
+        <header class="profile-head">
+          <span class="profile-avatar">{{ initial(displayName()) }}</span>
+          <div class="profile-head-info">
+            <h1>{{ displayName() }}</h1>
+            @if (p.title) {
+              <p class="profile-title">{{ p.title }}</p>
+            }
+          </div>
+          @if (p.isSelf && !editing()) {
+            <button type="button" class="secondary-btn" (click)="startEdit()">Düzenle</button>
+          }
+        </header>
+
+        @if (editing()) {
+          <form [formGroup]="form" (ngSubmit)="save()" class="profile-form">
+            <div class="field-row">
+              <label class="field">
+                <span>Ad</span>
+                <input type="text" formControlName="firstName" maxlength="100" placeholder="Adın" />
+              </label>
+              <label class="field">
+                <span>Soyad</span>
+                <input type="text" formControlName="lastName" maxlength="100" placeholder="Soyadın" />
+              </label>
+            </div>
+
+            <label class="field">
+              <span>Ünvan</span>
+              <input type="text" formControlName="title" maxlength="100" placeholder="Örn. Frontend Developer" />
+            </label>
+
+            <label class="field">
+              <span>Telefon</span>
+              <input type="tel" formControlName="phoneNumber" maxlength="30" placeholder="Örn. 0555 555 55 55" />
+              @if (form.controls.phoneNumber.invalid && form.controls.phoneNumber.touched) {
+                <span class="field-error">Geçerli bir telefon numarası girin (10-20 hane, rakam/boşluk/(+ - ) ).</span>
+              }
+            </label>
+
+            @if (saveError()) {
+              <p class="error-box">{{ saveError() }}</p>
+            }
+
+            <div class="form-actions">
+              <button type="button" class="secondary-btn" (click)="cancelEdit()" [disabled]="saving()">İptal</button>
+              <button type="submit" class="primary-btn" [disabled]="saving()">
+                {{ saving() ? 'Kaydediliyor...' : 'Kaydet' }}
+              </button>
+            </div>
+          </form>
+        } @else {
+          <dl class="profile-details">
+            <div class="detail-row">
+              <dt>E-posta</dt>
+              <dd>{{ p.email }}</dd>
+            </div>
+            <div class="detail-row">
+              <dt>Telefon</dt>
+              <dd>{{ p.phoneNumber || '—' }}</dd>
+            </div>
+            <div class="detail-row">
+              <dt>Ünvan</dt>
+              <dd>{{ p.title || '—' }}</dd>
+            </div>
+            <div class="detail-row">
+              <dt>Katılma tarihi</dt>
+              <dd>{{ p.createdDate | date: 'dd MMM yyyy' }}</dd>
+            </div>
+          </dl>
+        }
+      </section>
+    }
+  </main>
+</app-layout>
