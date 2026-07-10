@@ -17,6 +17,8 @@ public class TodooDbContext : DbContext
     public DbSet<TeamBoardColumn> TeamBoardColumns => Set<TeamBoardColumn>();
     public DbSet<TaskActivityLog> TaskActivityLogs => Set<TaskActivityLog>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
+    public DbSet<TaskComment> TaskComments => Set<TaskComment>();
+    public DbSet<CommentAttachment> CommentAttachments => Set<CommentAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -174,6 +176,56 @@ public class TodooDbContext : DbContext
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<TaskAttachment>()
+            .HasOne(attachment => attachment.UploadedBy)
+            .WithMany()
+            .HasForeignKey(attachment => attachment.UploadedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TaskComment>()
+            .Property(comment => comment.Body)
+            .HasMaxLength(4000)
+            .IsRequired();
+
+        modelBuilder.Entity<TaskComment>()
+            .HasOne(comment => comment.Task)
+            .WithMany(task => task.Comments)
+            .HasForeignKey(comment => comment.TaskId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TaskComment>()
+            .HasOne(comment => comment.Author)
+            .WithMany()
+            .HasForeignKey(comment => comment.AuthorUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TaskComment>()
+            .HasOne(comment => comment.ParentComment)
+            .WithMany(comment => comment.Replies)
+            .HasForeignKey(comment => comment.ParentCommentId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<CommentAttachment>()
+            .Property(attachment => attachment.FileName)
+            .HasMaxLength(255)
+            .IsRequired();
+
+        modelBuilder.Entity<CommentAttachment>()
+            .Property(attachment => attachment.ContentType)
+            .HasMaxLength(120)
+            .IsRequired();
+
+        modelBuilder.Entity<CommentAttachment>()
+            .Property(attachment => attachment.ObjectKey)
+            .HasMaxLength(500)
+            .IsRequired();
+
+        modelBuilder.Entity<CommentAttachment>()
+            .HasOne(attachment => attachment.Comment)
+            .WithMany(comment => comment.Attachments)
+            .HasForeignKey(attachment => attachment.CommentId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<CommentAttachment>()
             .HasOne(attachment => attachment.UploadedBy)
             .WithMany()
             .HasForeignKey(attachment => attachment.UploadedByUserId)

@@ -1,11 +1,11 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, debounceTime, distinctUntilChanged, EMPTY, of, switchMap } from 'rxjs';
+import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, from, of, switchMap, toArray } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
@@ -16,10 +16,14 @@ import { AppLayout } from '../../../shared/components/app-layout/app-layout';
 import { Category } from '../../../models/category.model';
 import {
   AssignmentStatus,
+  BoardColumn,
   BoardColumnWithTasks,
+  CommentAttachment,
+  CreateCommentRequest,
   Priority,
   TaskActivityAction,
   TaskAttachment,
+  TaskComment,
   TaskDetail,
   TaskListItem,
   TeamActivityLog,
@@ -38,7 +42,7 @@ interface RemoteTaskDrag {
 
 @Component({
   selector: 'app-team-board',
-  imports: [AppLayout, ReactiveFormsModule, DatePipe, RouterLink],
+  imports: [AppLayout, ReactiveFormsModule, DatePipe, RouterLink, NgTemplateOutlet],
   templateUrl: './team-board.html',
   styleUrl: './team-board.scss'
 })
@@ -105,9 +109,29 @@ export class TeamBoard implements OnInit {
   readonly deletingAttachmentId = signal<number | null>(null);
   readonly attachmentPreviewUrls = signal<Record<number, string>>({});
   readonly trustedPreviewUrls = signal<Record<number, SafeResourceUrl>>({});
+  readonly attachmentPreviewLoadingIds = signal<Set<number>>(new Set());
   readonly selectedAttachmentId = signal<number | null>(null);
   readonly attachmentLightbox = signal<TaskAttachment | null>(null);
   readonly attachmentLightboxLoading = signal(false);
+  readonly taskComments = signal<TaskComment[]>([]);
+  readonly taskCommentsLoading = signal(false);
+  readonly postingComment = signal(false);
+  readonly commentError = signal<string | null>(null);
+  readonly replyToCommentId = signal<number | null>(null);
+  readonly pendingCommentFiles = signal<File[]>([]);
+  readonly deletingCommentId = signal<number | null>(null);
+  readonly deletingCommentAttachmentKey = signal<string | null>(null);
+  readonly leftPaneTab = signal<'comments' | 'activity'>('comments');
+  readonly attachmentsExpanded = signal(false);
+  readonly descriptionExpanded = signal(true);
+  readonly activityExpanded = signal(false);
+  readonly detailsExpanded = signal(true);
+  readonly showColumnMenu = signal(false);
+  readonly movingColumn = signal(false);
+
+  readonly commentForm = this.fb.nonNullable.group({
+    body: ['', [Validators.maxLength(4000)]]
+  });
 
   readonly selectedAttachment = computed(() => {
     const id = this.selectedAttachmentId();
@@ -131,6 +155,7 @@ export class TeamBoard implements OnInit {
   readonly respondingToAssignment = signal(false);
 
   private readonly user = this.auth.getUser();
+  private attachmentPreviewGeneration = 0;
 
   readonly assigneeFilterMember = computed(() => {
     const filter = this.assigneeFilter();
@@ -281,6 +306,7 @@ export class TeamBoard implements OnInit {
         if (this.showDetailModal() && openDetailId && affectsOpenDetail) {
           this.loadTaskActivity(openDetailId);
           this.loadTaskAttachments(openDetailId);
+          this.loadTaskComments(openDetailId);
         }
       });
 
@@ -369,6 +395,10 @@ export class TeamBoard implements OnInit {
     if (this.showMemberSearchResults()) {
       this.closeMemberSearchResults();
     }
+
+    if (this.showColumnMenu()) {
+      this.closeColumnMenu();
+    }
   }
 
   private async connectBoardHub(teamId: number): Promise<void> {
@@ -388,6 +418,17 @@ export class TeamBoard implements OnInit {
     this.taskActivity.set([]);
     this.taskAttachments.set([]);
     this.selectedAttachmentId.set(null);
+    this.taskComments.set([]);
+    this.replyToCommentId.set(null);
+    this.pendingCommentFiles.set([]);
+    this.leftPaneTab.set('comments');
+    this.attachmentsExpanded.set(false);
+    this.descriptionExpanded.set(true);
+    this.activityExpanded.set(false);
+    this.detailsExpanded.set(true);
+    this.showColumnMenu.set(false);
+    this.movingColumn.set(false);
+    this.commentForm.reset({ body: '' });
     this.revokeAttachmentPreviewUrls();
     this.closeAttachmentLightbox();
     this.board.set(null);
@@ -560,23 +601,136 @@ export class TeamBoard implements OnInit {
   }
 
   private loadAttachmentPreviews(taskId: number, attachments: TaskAttachment[]): void {
-    this.revokeAttachmentPreviewUrls();
+    const generation = ++this.attachmentPreviewGeneration;
     const previewableAttachments = attachments.filter(
       (attachment) => this.isImageAttachment(attachment) || this.isPdfAttachment(attachment)
     );
+    const previewableIds = new Set(previewableAttachments.map((attachment) => attachment.id));
 
+    this.pruneAttachmentPreviewUrls(previewableIds);
+
+    const loadingIds = new Set<number>();
     for (const attachment of previewableAttachments) {
+      if (this.attachmentPreviewUrl(attachment.id)) {
+        continue;
+      }
+
+      loadingIds.add(attachment.id);
       this.taskService.downloadAttachment(taskId, attachment.id).subscribe({
-        next: (blob) => this.registerPreviewBlob(attachment, blob),
-        error: () => {}
+        next: (blob) => {
+          if (generation !== this.attachmentPreviewGeneration) {
+            return;
+          }
+
+          this.clearAttachmentPreviewLoading(attachment.id);
+          if (!this.isUsablePreviewBlob(attachment, blob)) {
+            return;
+          }
+
+          this.registerPreviewBlob(attachment, blob);
+        },
+        error: () => {
+          if (generation !== this.attachmentPreviewGeneration) {
+            return;
+          }
+          this.clearAttachmentPreviewLoading(attachment.id);
+        }
       });
     }
+
+    this.attachmentPreviewLoadingIds.set(loadingIds);
+  }
+
+  private pruneAttachmentPreviewUrls(validIds: Set<number>): void {
+    this.attachmentPreviewUrls.update((current) => {
+      const next: Record<number, string> = {};
+      for (const [id, url] of Object.entries(current)) {
+        const attachmentId = Number(id);
+        if (validIds.has(attachmentId)) {
+          next[attachmentId] = url;
+        } else {
+          URL.revokeObjectURL(url);
+        }
+      }
+      return next;
+    });
+
+    this.trustedPreviewUrls.update((current) => {
+      const next: Record<number, SafeResourceUrl> = {};
+      for (const [id, url] of Object.entries(current)) {
+        const attachmentId = Number(id);
+        if (validIds.has(attachmentId)) {
+          next[attachmentId] = url;
+        }
+      }
+      return next;
+    });
+  }
+
+  private clearAttachmentPreviewLoading(attachmentId: number): void {
+    this.attachmentPreviewLoadingIds.update((current) => {
+      if (!current.has(attachmentId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.delete(attachmentId);
+      return next;
+    });
+  }
+
+  attachmentPreviewLoading(attachmentId: number): boolean {
+    return this.attachmentPreviewLoadingIds().has(attachmentId);
+  }
+
+  onAttachmentThumbError(attachmentId: number): void {
+    const url = this.attachmentPreviewUrls()[attachmentId];
+    if (url) {
+      URL.revokeObjectURL(url);
+    }
+
+    this.attachmentPreviewUrls.update((current) => {
+      const next = { ...current };
+      delete next[attachmentId];
+      return next;
+    });
+
+    this.trustedPreviewUrls.update((current) => {
+      const next = { ...current };
+      delete next[attachmentId];
+      return next;
+    });
+  }
+
+  private isUsablePreviewBlob(attachment: TaskAttachment, blob: Blob): boolean {
+    if (!blob || blob.size === 0) {
+      return false;
+    }
+
+    const mime = (blob.type || attachment.contentType || '').toLowerCase();
+    if (mime.includes('json') || mime.includes('html') || mime.includes('text/plain')) {
+      return false;
+    }
+
+    if (this.isImageAttachment(attachment) && blob.size < 64) {
+      return false;
+    }
+
+    if (this.isPdfAttachment(attachment) && blob.size < 5) {
+      return false;
+    }
+
+    return true;
   }
 
   private registerPreviewBlob(attachment: TaskAttachment, blob: Blob): void {
     const contentType = this.resolvePreviewContentType(attachment, blob);
     const typedBlob = blob.type === contentType ? blob : new Blob([blob], { type: contentType });
     const url = URL.createObjectURL(typedBlob);
+
+    const existingUrl = this.attachmentPreviewUrls()[attachment.id];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+    }
 
     this.attachmentPreviewUrls.update((current) => ({ ...current, [attachment.id]: url }));
     this.trustedPreviewUrls.update((current) => ({
@@ -608,6 +762,27 @@ export class TeamBoard implements OnInit {
 
   selectAttachment(attachment: TaskAttachment): void {
     this.selectedAttachmentId.set(attachment.id);
+    this.ensureAttachmentPreview(attachment);
+  }
+
+  private ensureAttachmentPreview(attachment: TaskAttachment): void {
+    const detail = this.detail();
+    if (!detail) {
+      return;
+    }
+
+    if (!this.isImageAttachment(attachment) && !this.isPdfAttachment(attachment)) {
+      return;
+    }
+
+    if (this.attachmentPreviewUrl(attachment.id)) {
+      return;
+    }
+
+    this.taskService.downloadAttachment(detail.id, attachment.id).subscribe({
+      next: (blob) => this.registerPreviewBlob(attachment, blob),
+      error: () => {}
+    });
   }
 
   attachmentPreviewUrl(attachmentId: number): string | null {
@@ -692,6 +867,7 @@ export class TeamBoard implements OnInit {
     this.taskService.uploadAttachment(detail.id, file).subscribe({
       next: () => {
         this.uploadingAttachment.set(false);
+        this.attachmentsExpanded.set(true);
         this.loadTaskAttachments(detail.id);
         this.loadTaskActivity(detail.id);
       },
@@ -700,6 +876,255 @@ export class TeamBoard implements OnInit {
         this.attachmentError.set(err.error?.message ?? 'Dosya yüklenemedi.');
       }
     });
+  }
+
+  private loadTaskComments(taskId: number): void {
+    this.taskCommentsLoading.set(true);
+    this.commentError.set(null);
+    this.taskService.listComments(taskId).subscribe({
+      next: (comments) => {
+        this.taskComments.set(comments);
+        this.taskCommentsLoading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.taskComments.set([]);
+        this.taskCommentsLoading.set(false);
+        this.commentError.set(err.error?.message ?? 'Yorumlar yüklenemedi.');
+      }
+    });
+  }
+
+  startReplyToComment(commentId: number): void {
+    this.replyToCommentId.set(commentId);
+    this.leftPaneTab.set('comments');
+    this.commentError.set(null);
+  }
+
+  cancelReply(): void {
+    this.replyToCommentId.set(null);
+  }
+
+  setLeftPaneTab(tab: 'comments' | 'activity'): void {
+    this.leftPaneTab.set(tab);
+  }
+
+  toggleAttachmentsPanel(): void {
+    this.attachmentsExpanded.update((expanded) => !expanded);
+  }
+
+  toggleDescriptionSection(): void {
+    this.descriptionExpanded.update((expanded) => !expanded);
+  }
+
+  toggleActivitySection(): void {
+    this.activityExpanded.update((expanded) => !expanded);
+  }
+
+  toggleDetailsSection(): void {
+    this.detailsExpanded.update((expanded) => !expanded);
+  }
+
+  onCommentFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    input.value = '';
+    if (files.length === 0) {
+      return;
+    }
+    this.pendingCommentFiles.update((current) => [...current, ...files]);
+  }
+
+  removePendingCommentFile(index: number): void {
+    this.pendingCommentFiles.update((current) => current.filter((_, i) => i !== index));
+  }
+
+  submitComment(): void {
+    const detail = this.detail();
+    if (!detail || this.postingComment()) {
+      return;
+    }
+
+    const body = this.commentForm.controls.body.value.trim();
+    const files = this.pendingCommentFiles();
+    if (!body && files.length === 0) {
+      this.commentError.set('Yorum yazın veya dosya ekleyin.');
+      return;
+    }
+
+    const request: CreateCommentRequest = {
+      body: body || (files.length > 0 ? '(dosya eki)' : ''),
+      parentCommentId: this.replyToCommentId()
+    };
+
+    this.postingComment.set(true);
+    this.commentError.set(null);
+
+    this.taskService.createComment(detail.id, request).pipe(
+      switchMap((comment) => {
+        if (files.length === 0) {
+          return of(comment);
+        }
+        return from(files).pipe(
+          concatMap((file) => this.taskService.uploadCommentAttachment(detail.id, comment.id, file)),
+          toArray(),
+          switchMap(() => of(comment))
+        );
+      })
+    ).subscribe({
+      next: () => {
+        this.postingComment.set(false);
+        this.commentForm.reset({ body: '' });
+        this.pendingCommentFiles.set([]);
+        this.replyToCommentId.set(null);
+        this.loadTaskComments(detail.id);
+        this.loadTaskAttachments(detail.id);
+        this.attachmentsExpanded.set(true);
+        this.loadTaskActivity(detail.id);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.postingComment.set(false);
+        this.commentError.set(err.error?.message ?? 'Yorum gönderilemedi.');
+      }
+    });
+  }
+
+  deleteComment(comment: TaskComment): void {
+    const detail = this.detail();
+    if (!detail || !confirm('Bu yorum ve tüm yanıtları silinsin mi?')) {
+      return;
+    }
+
+    this.deletingCommentId.set(comment.id);
+    this.commentError.set(null);
+
+    this.taskService.deleteComment(detail.id, comment.id).subscribe({
+      next: () => {
+        this.deletingCommentId.set(null);
+        if (this.replyToCommentId() === comment.id) {
+          this.replyToCommentId.set(null);
+        }
+        this.loadTaskComments(detail.id);
+        this.loadTaskAttachments(detail.id);
+        this.loadTaskActivity(detail.id);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.deletingCommentId.set(null);
+        this.commentError.set(err.error?.message ?? 'Yorum silinemedi.');
+      }
+    });
+  }
+
+  downloadCommentAttachment(comment: TaskComment, attachment: CommentAttachment): void {
+    const detail = this.detail();
+    if (!detail) {
+      return;
+    }
+
+    this.taskService.downloadCommentAttachment(detail.id, comment.id, attachment.id).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = attachment.fileName;
+        anchor.click();
+        URL.revokeObjectURL(url);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.commentError.set(err.error?.message ?? 'Dosya indirilemedi.');
+      }
+    });
+  }
+
+  deleteCommentAttachment(comment: TaskComment, attachment: CommentAttachment): void {
+    const detail = this.detail();
+    if (!detail || !confirm(`"${attachment.fileName}" dosyası silinsin mi?`)) {
+      return;
+    }
+
+    const key = `${comment.id}-${attachment.id}`;
+    this.deletingCommentAttachmentKey.set(key);
+    this.commentError.set(null);
+
+    this.taskService.deleteCommentAttachment(detail.id, comment.id, attachment.id).subscribe({
+      next: () => {
+        this.deletingCommentAttachmentKey.set(null);
+        this.loadTaskComments(detail.id);
+        this.loadTaskAttachments(detail.id);
+        this.loadTaskActivity(detail.id);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.deletingCommentAttachmentKey.set(null);
+        this.commentError.set(err.error?.message ?? 'Dosya silinemedi.');
+      }
+    });
+  }
+
+  commentAuthorName(comment: TaskComment): string {
+    const member = this.team()?.members.find((m) => m.userId === comment.authorUserId);
+    if (member) {
+      return this.memberName(member);
+    }
+    return comment.authorEmail || 'Bir kullanıcı';
+  }
+
+  commentAvatarTone(userId: number): string {
+    const tones = ['tone-a', 'tone-b', 'tone-c', 'tone-d', 'tone-e', 'tone-f'];
+    return tones[Math.abs(userId) % tones.length];
+  }
+
+  canDeleteComment(comment: TaskComment): boolean {
+    const detail = this.detail();
+    const userId = this.user?.userId;
+    if (!detail || userId == null) {
+      return false;
+    }
+    return (
+      comment.authorUserId === userId ||
+      detail.createdByUserId === userId ||
+      this.isLeader()
+    );
+  }
+
+  canDeleteCommentAttachment(comment: TaskComment, attachment: CommentAttachment): boolean {
+    const userId = this.user?.userId;
+    if (userId == null) {
+      return false;
+    }
+    return (
+      attachment.uploadedByUserId === userId ||
+      comment.authorUserId === userId ||
+      this.canDeleteComment(comment)
+    );
+  }
+
+  isImageCommentAttachment(attachment: CommentAttachment): boolean {
+    return attachment.contentType.startsWith('image/');
+  }
+
+  isPdfCommentAttachment(attachment: CommentAttachment): boolean {
+    return attachment.contentType === 'application/pdf';
+  }
+
+  replyTargetLabel(): string | null {
+    const replyId = this.replyToCommentId();
+    if (replyId == null) {
+      return null;
+    }
+    const target = this.findCommentById(this.taskComments(), replyId);
+    return target ? this.commentAuthorName(target) : null;
+  }
+
+  private findCommentById(comments: TaskComment[], commentId: number): TaskComment | null {
+    for (const comment of comments) {
+      if (comment.id === commentId) {
+        return comment;
+      }
+      const nested = this.findCommentById(comment.replies ?? [], commentId);
+      if (nested) {
+        return nested;
+      }
+    }
+    return null;
   }
 
   openAttachmentFile(attachment: TaskAttachment): void {
@@ -802,7 +1227,11 @@ export class TeamBoard implements OnInit {
   }
 
   isImageAttachment(attachment: TaskAttachment): boolean {
-    return attachment.contentType.startsWith('image/');
+    if (attachment.contentType.startsWith('image/')) {
+      return true;
+    }
+
+    return /\.(jpe?g|png|gif|webp)$/i.test(attachment.fileName);
   }
 
   isPdfAttachment(attachment: TaskAttachment): boolean {
@@ -872,6 +1301,10 @@ export class TeamBoard implements OnInit {
         return `${who}, "${log.newValue}" dosyasını ekledi.`;
       case TaskActivityAction.AttachmentDeleted:
         return `${who}, "${log.oldValue}" dosyasını sildi.`;
+      case TaskActivityAction.CommentAdded:
+        return `${who}, yorum ekledi: "${log.newValue}"`;
+      case TaskActivityAction.CommentDeleted:
+        return `${who}, bir yorumu sildi: "${log.oldValue}"`;
       default:
         return `${who}, bir işlem yaptı.`;
     }
@@ -1108,6 +1541,17 @@ export class TeamBoard implements OnInit {
     this.taskActivity.set([]);
     this.taskAttachments.set([]);
     this.selectedAttachmentId.set(null);
+    this.taskComments.set([]);
+    this.replyToCommentId.set(null);
+    this.pendingCommentFiles.set([]);
+    this.leftPaneTab.set('comments');
+    this.attachmentsExpanded.set(false);
+    this.descriptionExpanded.set(true);
+    this.activityExpanded.set(false);
+    this.detailsExpanded.set(true);
+    this.showColumnMenu.set(false);
+    this.movingColumn.set(false);
+    this.commentForm.reset({ body: '' });
     this.revokeAttachmentPreviewUrls();
 
     this.taskService.getTask(task.id).subscribe({
@@ -1116,6 +1560,7 @@ export class TeamBoard implements OnInit {
         this.detailLoading.set(false);
         this.loadTaskActivity(task.id);
         this.loadTaskAttachments(task.id);
+        this.loadTaskComments(task.id);
       },
       error: (err: HttpErrorResponse) => {
         this.detailLoading.set(false);
@@ -1134,6 +1579,17 @@ export class TeamBoard implements OnInit {
     this.taskActivity.set([]);
     this.taskAttachments.set([]);
     this.selectedAttachmentId.set(null);
+    this.taskComments.set([]);
+    this.replyToCommentId.set(null);
+    this.pendingCommentFiles.set([]);
+    this.leftPaneTab.set('comments');
+    this.attachmentsExpanded.set(false);
+    this.descriptionExpanded.set(true);
+    this.activityExpanded.set(false);
+    this.detailsExpanded.set(true);
+    this.showColumnMenu.set(false);
+    this.movingColumn.set(false);
+    this.commentForm.reset({ body: '' });
     this.revokeAttachmentPreviewUrls();
     this.closeAttachmentLightbox();
   }
@@ -1236,6 +1692,48 @@ export class TeamBoard implements OnInit {
     });
   }
 
+  toggleColumnMenu(): void {
+    this.showColumnMenu.update((open) => !open);
+  }
+
+  closeColumnMenu(): void {
+    this.showColumnMenu.set(false);
+  }
+
+  selectDetailColumn(column: BoardColumn): void {
+    const detail = this.detail();
+    if (!detail || detail.boardColumnId === column.id || this.movingColumn()) {
+      this.closeColumnMenu();
+      return;
+    }
+
+    this.movingColumn.set(true);
+    this.closeColumnMenu();
+    this.moveTaskLocally(detail.id, detail.boardColumnId, column.id);
+
+    this.taskService.moveToColumn(detail.id, column.id).subscribe({
+      next: () => {
+        this.movingColumn.set(false);
+        this.detail.update((current) =>
+          current
+            ? {
+                ...current,
+                boardColumnId: column.id,
+                boardColumnTitle: column.title,
+                isCompleted: column.isCompletedColumn
+              }
+            : null
+        );
+        this.load();
+      },
+      error: () => {
+        this.movingColumn.set(false);
+        this.refreshDetail(detail.id);
+        this.load();
+      }
+    });
+  }
+
   private refreshDetail(taskId: number): void {
     this.taskService.getTask(taskId).subscribe({
       next: (detail) => this.detail.set(detail),
@@ -1243,6 +1741,7 @@ export class TeamBoard implements OnInit {
     });
     this.loadTaskActivity(taskId);
     this.loadTaskAttachments(taskId);
+    this.loadTaskComments(taskId);
   }
 
   private toDateInput(iso: string): string {

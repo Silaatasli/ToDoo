@@ -15,11 +15,16 @@ public class TaskItemsController : ControllerBase
 {
     private readonly ITaskService _taskService;
     private readonly ITaskAttachmentService _taskAttachmentService;
+    private readonly ITaskCommentService _taskCommentService;
 
-    public TaskItemsController(ITaskService taskService, ITaskAttachmentService taskAttachmentService)
+    public TaskItemsController(
+        ITaskService taskService,
+        ITaskAttachmentService taskAttachmentService,
+        ITaskCommentService taskCommentService)
     {
         _taskService = taskService;
         _taskAttachmentService = taskAttachmentService;
+        _taskCommentService = taskCommentService;
     }
 
     private bool TryGetUserId(out int userId)
@@ -212,6 +217,99 @@ public class TaskItemsController : ControllerBase
         }
 
         var result = await _taskAttachmentService.DeleteAsync(taskId, attachmentId, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("{taskId:int}/comments")]
+    public async Task<IActionResult> ListComments(int taskId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskCommentService.ListAsync(taskId, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{taskId:int}/comments")]
+    public async Task<IActionResult> CreateComment(int taskId, [FromBody] CreateTaskCommentRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskCommentService.CreateAsync(taskId, request.Body, request.ParentCommentId, userId);
+        return result.ToActionResult(created => Ok(created));
+    }
+
+    [HttpDelete("{taskId:int}/comments/{commentId:int}")]
+    public async Task<IActionResult> DeleteComment(int taskId, int commentId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskCommentService.DeleteAsync(taskId, commentId, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{taskId:int}/comments/{commentId:int}/attachments")]
+    [RequestSizeLimit(10 * 1024 * 1024)]
+    public async Task<IActionResult> UploadCommentAttachment(int taskId, int commentId, IFormFile file)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { success = false, message = "Dosya secilmedi." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _taskCommentService.UploadAttachmentAsync(
+            taskId,
+            commentId,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            stream,
+            userId);
+
+        return result.ToActionResult(created => Ok(created));
+    }
+
+    [HttpGet("{taskId:int}/comments/{commentId:int}/attachments/{attachmentId:int}/download")]
+    public async Task<IActionResult> DownloadCommentAttachment(int taskId, int commentId, int attachmentId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskCommentService.DownloadAttachmentAsync(taskId, commentId, attachmentId, userId);
+        if (!result.Success)
+        {
+            return result.ToActionResult();
+        }
+
+        var (stream, contentType, fileName) = result.Data!;
+        return File(stream, contentType, fileName);
+    }
+
+    [HttpDelete("{taskId:int}/comments/{commentId:int}/attachments/{attachmentId:int}")]
+    public async Task<IActionResult> DeleteCommentAttachment(int taskId, int commentId, int attachmentId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskCommentService.DeleteAttachmentAsync(taskId, commentId, attachmentId, userId);
         return result.ToActionResult();
     }
 

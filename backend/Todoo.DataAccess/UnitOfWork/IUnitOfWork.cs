@@ -13,5 +13,7 @@ public interface IUnitOfWork
     IRepository<TeamBoardColumn> TeamBoardColumns { get; }
     IRepository<TaskActivityLog> TaskActivityLogs { get; }
     IRepository<TaskAttachment> TaskAttachments { get; }
+    IRepository<TaskComment> TaskComments { get; }
+    IRepository<CommentAttachment> CommentAttachments { get; }
     Task<int> SaveChangesAsync();
 }

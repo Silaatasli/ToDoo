@@ -146,7 +146,9 @@ export enum TaskActivityAction {
   AssignmentAccepted = 6,
   AssignmentDeclined = 7,
   AttachmentAdded = 8,
-  AttachmentDeleted = 9
+  AttachmentDeleted = 9,
+  CommentAdded = 10,
+  CommentDeleted = 11
 }
 
 export interface TaskAttachment {
@@ -169,4 +171,32 @@ export interface TeamActivityLog {
   oldValue?: string | null;
   newValue?: string | null;
   createdDate: string;
+}
+
+export interface CommentAttachment {
+  id: number;
+  commentId: number;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedByUserId: number;
+  uploadedByEmail: string;
+  createdDate: string;
+}
+
+export interface TaskComment {
+  id: number;
+  taskId: number;
+  parentCommentId?: number | null;
+  body: string;
+  authorUserId: number;
+  authorEmail: string;
+  createdDate: string;
+  attachments: CommentAttachment[];
+  replies: TaskComment[];
+}
+
+export interface CreateCommentRequest {
+  body: string;
+  parentCommentId?: number | null;
 }

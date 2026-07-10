@@ -53,4 +53,7 @@ public class TaskItem
 
     [JsonIgnore]
     public ICollection<TaskAttachment> Attachments { get; set; } = [];
+
+    [JsonIgnore]
+    public ICollection<TaskComment> Comments { get; set; } = [];
 }

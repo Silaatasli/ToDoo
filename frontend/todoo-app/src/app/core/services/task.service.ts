@@ -3,7 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import {
+  CommentAttachment,
+  CreateCommentRequest,
   TaskAttachment,
+  TaskComment,
   TaskDetail,
   TaskListItem,
   TeamActivityLog,
@@ -73,5 +76,39 @@ export class TaskService {
 
   deleteAttachment(taskId: number, attachmentId: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/${taskId}/attachments/${attachmentId}`);
+  }
+
+  listComments(taskId: number): Observable<TaskComment[]> {
+    return this.http.get<TaskComment[]>(`${this.baseUrl}/${taskId}/comments`);
+  }
+
+  createComment(taskId: number, request: CreateCommentRequest): Observable<TaskComment> {
+    return this.http.post<TaskComment>(`${this.baseUrl}/${taskId}/comments`, request);
+  }
+
+  deleteComment(taskId: number, commentId: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${taskId}/comments/${commentId}`);
+  }
+
+  uploadCommentAttachment(taskId: number, commentId: number, file: File): Observable<CommentAttachment> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<CommentAttachment>(
+      `${this.baseUrl}/${taskId}/comments/${commentId}/attachments`,
+      formData
+    );
+  }
+
+  downloadCommentAttachment(taskId: number, commentId: number, attachmentId: number): Observable<Blob> {
+    return this.http.get(
+      `${this.baseUrl}/${taskId}/comments/${commentId}/attachments/${attachmentId}/download`,
+      { responseType: 'blob' }
+    );
+  }
+
+  deleteCommentAttachment(taskId: number, commentId: number, attachmentId: number): Observable<void> {
+    return this.http.delete<void>(
+      `${this.baseUrl}/${taskId}/comments/${commentId}/attachments/${attachmentId}`
+    );
   }
 }

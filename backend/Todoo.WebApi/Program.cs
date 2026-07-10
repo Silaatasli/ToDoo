@@ -80,6 +80,7 @@ builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
+builder.Services.AddScoped<ITaskCommentService, TaskCommentService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IReportService, ReportService>();

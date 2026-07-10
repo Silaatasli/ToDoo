@@ -10,5 +10,7 @@ public enum TaskActivityAction
     AssignmentAccepted = 6,
     AssignmentDeclined = 7,
     AttachmentAdded = 8,
-    AttachmentDeleted = 9
+    AttachmentDeleted = 9,
+    CommentAdded = 10,
+    CommentDeleted = 11
 }

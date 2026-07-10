@@ -180,14 +180,34 @@ public class TaskAttachmentService : ITaskAttachmentService
             return ServiceResult.Fail("Bu dosyayi silme yetkiniz yok.", ServiceErrorKind.Forbidden);
         }
 
-        await _fileStorage.DeleteAsync(attachment.ObjectKey);
         await _unitOfWork.TaskAttachments.DeleteAsync(attachment.Id);
         await _unitOfWork.SaveChangesAsync();
+
+        await DeleteStoredObjectIfOrphanedAsync(attachment.ObjectKey);
 
         await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.AttachmentDeleted, attachment.FileName, null);
         await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskUpdated, userId, task.Id);
 
         return ServiceResult.Ok();
+    }
+
+    private async Task DeleteStoredObjectIfOrphanedAsync(string objectKey)
+    {
+        var stillUsedByTask = (await _unitOfWork.TaskAttachments.GetAllAsync())
+            .Any(attachment => attachment.ObjectKey == objectKey);
+        if (stillUsedByTask)
+        {
+            return;
+        }
+
+        var stillUsedByComment = (await _unitOfWork.CommentAttachments.GetAllAsync())
+            .Any(attachment => attachment.ObjectKey == objectKey);
+        if (stillUsedByComment)
+        {
+            return;
+        }
+
+        await _fileStorage.DeleteAsync(objectKey);
     }
 
     private async Task<ServiceResult<TaskItem>> GetTaskIfMemberAsync(int taskId, int userId)
