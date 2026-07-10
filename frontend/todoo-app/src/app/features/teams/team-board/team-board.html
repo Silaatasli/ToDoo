@@ -574,7 +574,13 @@
         } @else {
           <div class="jira-detail-layout">
             <aside class="jira-preview-pane">
-              <div class="preview-stage">
+              <div
+                class="preview-stage"
+                [class.attachment-drag-over]="attachmentDragOver()"
+                (dragover)="onAttachmentDragOver($event)"
+                (dragleave)="onAttachmentDragLeave($event)"
+                (drop)="onAttachmentDrop($event)"
+              >
                 @if (taskAttachmentsLoading()) {
                   <div class="preview-empty">
                     <span class="preview-empty-icon" aria-hidden="true">⏳</span>

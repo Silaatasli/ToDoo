@@ -1153,6 +1153,17 @@
   padding: 1.25rem;
   overflow: hidden;
   background: #fafbfc;
+
+  &.attachment-drag-over {
+    outline: 2px dashed #0052cc;
+    outline-offset: -4px;
+    background: #f0f6ff;
+
+    .preview-dropzone {
+      border-color: #0052cc;
+      background: #f0f6ff;
+    }
+  }
 }
 
 

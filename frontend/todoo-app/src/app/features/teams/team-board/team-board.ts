@@ -100,6 +100,7 @@ export class TeamBoard implements OnInit {
   readonly taskAttachments = signal<TaskAttachment[]>([]);
   readonly taskAttachmentsLoading = signal(false);
   readonly uploadingAttachment = signal(false);
+  readonly attachmentDragOver = signal(false);
   readonly attachmentError = signal<string | null>(null);
   readonly deletingAttachmentId = signal<number | null>(null);
   readonly attachmentPreviewUrls = signal<Record<number, string>>({});
@@ -637,8 +638,51 @@ export class TeamBoard implements OnInit {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     input.value = '';
+    if (!file) {
+      return;
+    }
+    this.uploadAttachmentFile(file);
+  }
+
+  onAttachmentDragOver(event: DragEvent): void {
+    if (this.uploadingAttachment()) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy';
+    }
+    this.attachmentDragOver.set(true);
+  }
+
+  onAttachmentDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const related = event.relatedTarget as Node | null;
+    const current = event.currentTarget as HTMLElement;
+    if (!related || !current.contains(related)) {
+      this.attachmentDragOver.set(false);
+    }
+  }
+
+  onAttachmentDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.attachmentDragOver.set(false);
+    if (this.uploadingAttachment()) {
+      return;
+    }
+    const file = event.dataTransfer?.files?.[0];
+    if (!file) {
+      return;
+    }
+    this.uploadAttachmentFile(file);
+  }
+
+  private uploadAttachmentFile(file: File): void {
     const detail = this.detail();
-    if (!file || !detail) {
+    if (!detail) {
       return;
     }
 
