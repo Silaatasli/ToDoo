@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, debounceTime, distinctUntilChanged, EMPTY, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
@@ -52,6 +53,7 @@ export class TeamBoard implements OnInit {
   private readonly boardHub = inject(TeamBoardHubService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly sanitizer = inject(DomSanitizer);
 
   readonly teamId = signal<number | null>(null);
   readonly board = signal<TeamBoardModel | null>(null);
@@ -101,7 +103,10 @@ export class TeamBoard implements OnInit {
   readonly attachmentError = signal<string | null>(null);
   readonly deletingAttachmentId = signal<number | null>(null);
   readonly attachmentPreviewUrls = signal<Record<number, string>>({});
+  readonly trustedPreviewUrls = signal<Record<number, SafeResourceUrl>>({});
   readonly selectedAttachmentId = signal<number | null>(null);
+  readonly attachmentLightbox = signal<TaskAttachment | null>(null);
+  readonly attachmentLightboxLoading = signal(false);
 
   readonly selectedAttachment = computed(() => {
     const id = this.selectedAttachmentId();
@@ -347,6 +352,13 @@ export class TeamBoard implements OnInit {
       });
   }
 
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    if (this.attachmentLightbox()) {
+      this.closeAttachmentLightbox();
+    }
+  }
+
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this.showAssigneeFilterMenu()) {
@@ -376,6 +388,7 @@ export class TeamBoard implements OnInit {
     this.taskAttachments.set([]);
     this.selectedAttachmentId.set(null);
     this.revokeAttachmentPreviewUrls();
+    this.closeAttachmentLightbox();
     this.board.set(null);
     this.team.set(null);
     this.remoteTaskDrags.set([]);
@@ -553,13 +566,34 @@ export class TeamBoard implements OnInit {
 
     for (const attachment of previewableAttachments) {
       this.taskService.downloadAttachment(taskId, attachment.id).subscribe({
-        next: (blob) => {
-          const url = URL.createObjectURL(blob);
-          this.attachmentPreviewUrls.update((current) => ({ ...current, [attachment.id]: url }));
-        },
+        next: (blob) => this.registerPreviewBlob(attachment, blob),
         error: () => {}
       });
     }
+  }
+
+  private registerPreviewBlob(attachment: TaskAttachment, blob: Blob): void {
+    const contentType = this.resolvePreviewContentType(attachment, blob);
+    const typedBlob = blob.type === contentType ? blob : new Blob([blob], { type: contentType });
+    const url = URL.createObjectURL(typedBlob);
+
+    this.attachmentPreviewUrls.update((current) => ({ ...current, [attachment.id]: url }));
+    this.trustedPreviewUrls.update((current) => ({
+      ...current,
+      [attachment.id]: this.sanitizer.bypassSecurityTrustResourceUrl(url)
+    }));
+  }
+
+  private resolvePreviewContentType(attachment: TaskAttachment, blob: Blob): string {
+    if (this.isPdfAttachment(attachment)) {
+      return 'application/pdf';
+    }
+
+    if (this.isImageAttachment(attachment)) {
+      return blob.type || attachment.contentType || 'image/jpeg';
+    }
+
+    return blob.type || attachment.contentType || 'application/octet-stream';
   }
 
   private syncSelectedAttachment(attachments: TaskAttachment[]): void {
@@ -579,11 +613,24 @@ export class TeamBoard implements OnInit {
     return this.attachmentPreviewUrls()[attachmentId] ?? null;
   }
 
+  trustedAttachmentPreviewUrl(attachmentId: number): SafeResourceUrl | null {
+    return this.trustedPreviewUrls()[attachmentId] ?? null;
+  }
+
+  lightboxTrustedPreviewUrl(): SafeResourceUrl | null {
+    const attachment = this.attachmentLightbox();
+    if (!attachment) {
+      return null;
+    }
+    return this.trustedAttachmentPreviewUrl(attachment.id);
+  }
+
   private revokeAttachmentPreviewUrls(): void {
     for (const url of Object.values(this.attachmentPreviewUrls())) {
       URL.revokeObjectURL(url);
     }
     this.attachmentPreviewUrls.set({});
+    this.trustedPreviewUrls.set({});
   }
 
   onAttachmentSelected(event: Event): void {
@@ -609,6 +656,47 @@ export class TeamBoard implements OnInit {
         this.attachmentError.set(err.error?.message ?? 'Dosya yüklenemedi.');
       }
     });
+  }
+
+  openAttachmentFile(attachment: TaskAttachment): void {
+    this.attachmentLightbox.set(attachment);
+
+    const existingUrl = this.attachmentPreviewUrl(attachment.id);
+    if (existingUrl) {
+      this.attachmentLightboxLoading.set(false);
+      return;
+    }
+
+    const detail = this.detail();
+    if (!detail) {
+      return;
+    }
+
+    this.attachmentLightboxLoading.set(true);
+    this.taskService.downloadAttachment(detail.id, attachment.id).subscribe({
+      next: (blob) => {
+        this.registerPreviewBlob(attachment, blob);
+        this.attachmentLightboxLoading.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.attachmentLightboxLoading.set(false);
+        this.attachmentLightbox.set(null);
+        this.attachmentError.set(err.error?.message ?? 'Dosya açılamadı.');
+      }
+    });
+  }
+
+  closeAttachmentLightbox(): void {
+    this.attachmentLightbox.set(null);
+    this.attachmentLightboxLoading.set(false);
+  }
+
+  lightboxPreviewUrl(): string | null {
+    const attachment = this.attachmentLightbox();
+    if (!attachment) {
+      return null;
+    }
+    return this.attachmentPreviewUrl(attachment.id);
   }
 
   downloadAttachmentFile(attachment: TaskAttachment): void {
@@ -674,7 +762,10 @@ export class TeamBoard implements OnInit {
   }
 
   isPdfAttachment(attachment: TaskAttachment): boolean {
-    return attachment.contentType === 'application/pdf';
+    return (
+      attachment.contentType === 'application/pdf' ||
+      attachment.fileName.toLowerCase().endsWith('.pdf')
+    );
   }
 
   attachmentKindLabel(attachment: TaskAttachment): string {
@@ -1000,6 +1091,7 @@ export class TeamBoard implements OnInit {
     this.taskAttachments.set([]);
     this.selectedAttachmentId.set(null);
     this.revokeAttachmentPreviewUrls();
+    this.closeAttachmentLightbox();
   }
 
   startDetailEdit(): void {

@@ -581,18 +581,33 @@
                     <p>Ekler yükleniyor...</p>
                   </div>
                 } @else if (selectedAttachment(); as active) {
-                  @if (isImageAttachment(active) && attachmentPreviewUrl(active.id); as previewUrl) {
-                    <img [src]="previewUrl" [alt]="active.fileName" class="preview-image" />
-                  } @else if (isPdfAttachment(active) && attachmentPreviewUrl(active.id); as previewUrl) {
-                    <iframe [src]="previewUrl" class="preview-pdf" [title]="active.fileName"></iframe>
-                  } @else {
-                    <div class="preview-file-card">
-                      <span class="preview-file-icon" aria-hidden="true">📄</span>
-                      <p class="preview-file-name">{{ active.fileName }}</p>
-                      <p class="preview-file-meta">{{ attachmentKindLabel(active) }} · {{ formatFileSize(active.sizeBytes) }}</p>
-                      <button type="button" class="primary-btn" (click)="downloadAttachmentFile(active)">İndir</button>
-                    </div>
-                  }
+                  <button
+                    type="button"
+                    class="preview-open-btn"
+                    (click)="openAttachmentFile(active)"
+                    [attr.aria-label]="active.fileName + ' dosyasını aç'"
+                    title="Dosyayı aç"
+                  >
+                    @if (isImageAttachment(active) && attachmentPreviewUrl(active.id); as previewUrl) {
+                      <img [src]="previewUrl" [alt]="active.fileName" class="preview-image" />
+                    } @else if (isPdfAttachment(active)) {
+                      @if (trustedAttachmentPreviewUrl(active.id); as previewUrl) {
+                        <iframe [src]="previewUrl" class="preview-pdf" [title]="active.fileName" tabindex="-1"></iframe>
+                      } @else {
+                        <div class="preview-pdf-loading">
+                          <span class="preview-thumb-pdf">PDF</span>
+                          <p>Önizleme yükleniyor...</p>
+                        </div>
+                      }
+                    } @else {
+                      <div class="preview-file-card">
+                        <span class="preview-file-icon" aria-hidden="true">📄</span>
+                        <p class="preview-file-name">{{ active.fileName }}</p>
+                        <p class="preview-file-meta">{{ attachmentKindLabel(active) }} · {{ formatFileSize(active.sizeBytes) }}</p>
+                        <span class="preview-open-hint">Büyütmek için tıklayın</span>
+                      </div>
+                    }
+                  </button>
                 } @else {
                   <label class="preview-dropzone">
                     <input
@@ -807,5 +822,45 @@
         }
       }
     </section> 
+  </div>
+}
+
+@if (attachmentLightbox(); as lb) {
+  <div class="attachment-lightbox-backdrop" (click)="closeAttachmentLightbox()">
+    <section class="attachment-lightbox" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" [attr.aria-label]="lb.fileName">
+      <header class="attachment-lightbox-header">
+        <span class="attachment-lightbox-title">{{ lb.fileName }}</span>
+        <button type="button" class="icon-btn" (click)="closeAttachmentLightbox()" aria-label="Kapat">×</button>
+      </header>
+
+      <div
+        class="attachment-lightbox-body"
+        [class.attachment-lightbox-body-image]="isImageAttachment(lb)"
+        [class.attachment-lightbox-body-pdf]="isPdfAttachment(lb)"
+      >
+        @if (attachmentLightboxLoading()) {
+          <p class="attachment-lightbox-loading">Yükleniyor...</p>
+        } @else if (lightboxPreviewUrl(); as previewUrl) {
+          @if (isImageAttachment(lb)) {
+            <img [src]="previewUrl" [alt]="lb.fileName" class="attachment-lightbox-image" />
+          } @else if (isPdfAttachment(lb) && lightboxTrustedPreviewUrl(); as trustedPdfUrl) {
+            <iframe [src]="trustedPdfUrl" class="attachment-lightbox-pdf" [title]="lb.fileName"></iframe>
+          } @else {
+            <div class="attachment-lightbox-file">
+              <span class="preview-file-icon" aria-hidden="true">📄</span>
+              <p>{{ lb.fileName }}</p>
+              <button type="button" class="primary-btn" (click)="downloadAttachmentFile(lb)">İndir</button>
+            </div>
+          }
+        } @else {
+          <p class="attachment-lightbox-loading">Önizleme yüklenemedi.</p>
+        }
+      </div>
+
+      <footer class="attachment-lightbox-footer">
+        <span>{{ formatFileSize(lb.sizeBytes) }} · {{ lb.uploadedByEmail }}</span>
+        <button type="button" class="secondary-btn" (click)="downloadAttachmentFile(lb)">İndir</button>
+      </footer>
+    </section>
   </div>
 }
