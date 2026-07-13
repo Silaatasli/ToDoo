@@ -22,11 +22,13 @@ public class UserService : IUserService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly IFileStorageService _fileStorage;
+    private readonly ILuceneSearchIndex _searchIndex;
 
-    public UserService(IUnitOfWork unitOfWork, IFileStorageService fileStorage)
+    public UserService(IUnitOfWork unitOfWork, IFileStorageService fileStorage, ILuceneSearchIndex searchIndex)
     {
         _unitOfWork = unitOfWork;
         _fileStorage = fileStorage;
+        _searchIndex = searchIndex;
     }
 
     public async Task<ServiceResult<UserProfileDto>> GetOwnProfileAsync(int userId)
@@ -71,6 +73,7 @@ public class UserService : IUserService
 
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync();
+        await IndexPersonDocumentAsync(user);
 
         return ServiceResult<UserProfileDto>.Ok(MapToDto(user, isSelf: true));
     }
@@ -155,6 +158,7 @@ public class UserService : IUserService
 
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync();
+        await IndexPersonDocumentAsync(user);
 
         if (!string.IsNullOrWhiteSpace(previousKey) &&
             !string.Equals(previousKey, objectKey, StringComparison.Ordinal))
@@ -216,6 +220,7 @@ public class UserService : IUserService
 
         _unitOfWork.Users.Update(user);
         await _unitOfWork.SaveChangesAsync();
+        await IndexPersonDocumentAsync(user);
 
         if (!string.IsNullOrWhiteSpace(previousKey))
         {
@@ -230,6 +235,21 @@ public class UserService : IUserService
         }
 
         return ServiceResult<UserProfileDto>.Ok(MapToDto(user, isSelf: true));
+    }
+
+    private async Task IndexPersonDocumentAsync(User user)
+    {
+        var membershipTeamIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.UserId == user.Id)
+            .Select(member => member.TeamId)
+            .ToHashSet();
+
+        var nonPersonalTeamIds = (await _unitOfWork.Teams.GetAllAsync())
+            .Where(team => membershipTeamIds.Contains(team.Id) && !team.IsPersonal)
+            .Select(team => team.Id)
+            .ToList();
+
+        _searchIndex.IndexPerson(user, nonPersonalTeamIds);
     }
 
     private async Task<bool> SharesTeamAsync(int targetUserId, int requesterUserId)

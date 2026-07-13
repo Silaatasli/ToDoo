@@ -16,27 +16,9 @@ dist/
 .tmp/
 .sourcemaps/
 
-## --------- İşletim Sistemi Çöpleri ---------
-Thumbs.db
-.DS_Store## --------- .NET (Backend) Çöpleri ---------
-bin/
-obj/
-*.dll
-*.exe
-*.pdb
-*.suo
-*.user
-.vs/
-.vscode/
-
-## --------- Angular (Frontend) Çöpleri ---------
-node_modules/
-.angular/
-dist/
-.tmp/
-.sourcemaps/
+## --------- Lucene index ---------
+backend/Todoo.WebApi/App_Data/
 
 ## --------- İşletim Sistemi Çöpleri ---------
 Thumbs.db
 .DS_Store
-

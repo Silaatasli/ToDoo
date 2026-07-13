@@ -14,11 +14,13 @@ public class TeamService : ITeamService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITeamBoardNotifier _boardNotifier;
+    private readonly ILuceneSearchIndex _searchIndex;
 
-    public TeamService(IUnitOfWork unitOfWork, ITeamBoardNotifier boardNotifier)
+    public TeamService(IUnitOfWork unitOfWork, ITeamBoardNotifier boardNotifier, ILuceneSearchIndex searchIndex)
     {
         _unitOfWork = unitOfWork;
         _boardNotifier = boardNotifier;
+        _searchIndex = searchIndex;
     }
 
     public async Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(string name, IReadOnlyList<string>? columnTitles, int userId)
@@ -63,6 +65,8 @@ public class TeamService : ITeamService
         }
 
         await _unitOfWork.SaveChangesAsync();
+        _searchIndex.IndexTeam(team);
+        await IndexPersonDocumentAsync(userId);
         return await GetTeamByIdAsync(team.Id, userId);
     }
 
@@ -294,6 +298,7 @@ public class TeamService : ITeamService
 
         _unitOfWork.TeamBoardColumns.Update(column);
         await _unitOfWork.SaveChangesAsync();
+        await ReindexTasksInColumnAsync(column);
         await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnUpdated, userId);
 
         return ServiceResult<TeamBoardColumnDto>.Ok(new TeamBoardColumnDto
@@ -363,8 +368,22 @@ public class TeamService : ITeamService
             return ServiceResult.Fail("Sadece takim lideri takimi silebilir.", ServiceErrorKind.Forbidden);
         }
 
+        var memberUserIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.TeamId == teamId)
+            .Select(member => member.UserId)
+            .Distinct()
+            .ToList();
+
         await _unitOfWork.Teams.DeleteAsync(teamId);
         await _unitOfWork.SaveChangesAsync();
+
+        _searchIndex.RemoveTeam(teamId);
+        _searchIndex.RemoveTasksForTeam(teamId);
+        foreach (var memberUserId in memberUserIds)
+        {
+            await IndexPersonDocumentAsync(memberUserId);
+        }
+
         return ServiceResult.Ok();
     }
 
@@ -405,6 +424,7 @@ public class TeamService : ITeamService
         });
 
         await _unitOfWork.SaveChangesAsync();
+        await IndexPersonDocumentAsync(newMember.Id);
         return ServiceResult.Ok();
     }
 
@@ -436,6 +456,7 @@ public class TeamService : ITeamService
 
         await _unitOfWork.TeamMembers.DeleteAsync(membership.Id);
         await _unitOfWork.SaveChangesAsync();
+        await IndexPersonDocumentAsync(memberUserId);
         return ServiceResult.Ok();
     }
 
@@ -548,5 +569,43 @@ public class TeamService : ITeamService
     private static bool HasCustomTitles(IReadOnlyList<string>? columnTitles)
     {
         return columnTitles is not null && columnTitles.Any(title => !string.IsNullOrWhiteSpace(title));
+    }
+
+    private async Task IndexPersonDocumentAsync(int userId)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (user is null)
+        {
+            return;
+        }
+
+        var membershipTeamIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.UserId == userId)
+            .Select(member => member.TeamId)
+            .ToHashSet();
+
+        var nonPersonalTeamIds = (await _unitOfWork.Teams.GetAllAsync())
+            .Where(team => membershipTeamIds.Contains(team.Id) && !team.IsPersonal)
+            .Select(team => team.Id)
+            .ToList();
+
+        _searchIndex.IndexPerson(user, nonPersonalTeamIds);
+    }
+
+    private async Task ReindexTasksInColumnAsync(TeamBoardColumn column)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(column.TeamId);
+        if (team is null || team.IsPersonal)
+        {
+            return;
+        }
+
+        var tasks = (await _unitOfWork.TaskItems.GetAllAsync())
+            .Where(task => task.BoardColumnId == column.Id);
+
+        foreach (var task in tasks)
+        {
+            _searchIndex.IndexTask(task, team.Name, column.Title);
+        }
     }
 }

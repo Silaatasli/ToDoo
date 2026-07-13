@@ -76,6 +76,12 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ITeamBoardNotifier, TeamBoardNotifier>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
+builder.Services.Configure<LuceneSearchOptions>(options =>
+{
+    options.IndexPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "lucene-index");
+});
+builder.Services.AddSingleton<ILuceneSearchIndex, LuceneSearchIndex>();
+builder.Services.AddHostedService<LuceneSearchHostedService>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITeamService, TeamService>();
 builder.Services.AddScoped<ITaskService, TaskService>();

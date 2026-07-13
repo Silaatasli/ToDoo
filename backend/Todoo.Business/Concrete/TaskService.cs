@@ -15,19 +15,22 @@ public class TaskService : ITaskService
     private readonly ITeamService _teamService;
     private readonly ITeamBoardNotifier _boardNotifier;
     private readonly IFileStorageService _fileStorage;
+    private readonly ILuceneSearchIndex _searchIndex;
 
     public TaskService(
         IUnitOfWork unitOfWork,
         ICategoryService categoryService,
         ITeamService teamService,
         ITeamBoardNotifier boardNotifier,
-        IFileStorageService fileStorage)
+        IFileStorageService fileStorage,
+        ILuceneSearchIndex searchIndex)
     {
         _unitOfWork = unitOfWork;
         _categoryService = categoryService;
         _teamService = teamService;
         _boardNotifier = boardNotifier;
         _fileStorage = fileStorage;
+        _searchIndex = searchIndex;
     }
 
     public async Task<ServiceResult<TaskDetailDto>> GetTaskDetailAsync(int taskId, int userId)
@@ -153,6 +156,7 @@ public class TaskService : ITaskService
         }
 
         await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskCreated, userId, task.Id);
+        await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }
@@ -186,6 +190,7 @@ public class TaskService : ITaskService
 
         await LogActivityAsync(existingTask.TeamId, existingTask.Id, userId, TaskActivityAction.Updated, null, existingTask.Title);
         await _boardNotifier.NotifyBoardChangedAsync(existingTask.TeamId, TeamBoardChangeTypes.TaskUpdated, userId, existingTask.Id);
+        await IndexTaskDocumentAsync(existingTask);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(existingTask));
     }
@@ -337,6 +342,7 @@ public class TaskService : ITaskService
             TeamBoardChangeTypes.TaskAssignmentAccepted,
             userId,
             task.Id);
+        await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }
@@ -459,6 +465,7 @@ public class TaskService : ITaskService
         }
 
         await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId);
+        _searchIndex.RemoveTask(taskId);
         return ServiceResult.Ok();
     }
 
@@ -509,8 +516,22 @@ public class TaskService : ITaskService
             newColumn.Title);
 
         await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskMoved, userId, task.Id);
+        await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
+    }
+
+    private async Task IndexTaskDocumentAsync(TaskItem task)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(task.TeamId);
+        if (team is null || team.IsPersonal)
+        {
+            _searchIndex.RemoveTask(task.Id);
+            return;
+        }
+
+        var column = await _unitOfWork.TeamBoardColumns.GetByIdAsync(task.BoardColumnId);
+        _searchIndex.IndexTask(task, team.Name, column?.Title ?? string.Empty);
     }
 
     private async Task LogActivityAsync(
