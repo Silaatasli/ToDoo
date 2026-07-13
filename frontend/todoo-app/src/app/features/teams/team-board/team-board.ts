@@ -158,6 +158,7 @@ export class TeamBoard implements OnInit {
 
   private readonly user = this.auth.getUser();
   private attachmentPreviewGeneration = 0;
+  private pendingOpenTaskId: number | null = null;
 
   readonly assigneeFilterMember = computed(() => {
     const filter = this.assigneeFilter();
@@ -287,6 +288,14 @@ export class TeamBoard implements OnInit {
       this.teamId.set(id);
       this.load();
       void this.connectBoardHub(id);
+    });
+
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((query) => {
+      const taskId = Number(query.get('taskId'));
+      if (!Number.isNaN(taskId) && taskId > 0) {
+        this.pendingOpenTaskId = taskId;
+        this.tryOpenPendingTask();
+      }
     });
 
     this.boardHub.boardChanged$
@@ -557,6 +566,7 @@ export class TeamBoard implements OnInit {
       next: (board) => {
         this.board.set(board);
         this.loading.set(false);
+        this.tryOpenPendingTask();
       },
       error: (err: HttpErrorResponse) => {
         this.loading.set(false);
@@ -1580,6 +1590,21 @@ export class TeamBoard implements OnInit {
         this.detailLoading.set(false);
         this.detailError.set(err.error?.message ?? 'Görev detayı yüklenemedi.');
       }
+    });
+  }
+
+  private tryOpenPendingTask(): void {
+    const taskId = this.pendingOpenTaskId;
+    if (taskId == null || this.loading()) {
+      return;
+    }
+
+    this.pendingOpenTaskId = null;
+    this.openTaskDetail({ id: taskId } as TaskListItem);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {},
+      replaceUrl: true
     });
   }
 

@@ -9,7 +9,7 @@ public class TaskActivityLog
 
     public int TeamId { get; set; }
 
-    public int TaskId { get; set; }
+    public int? TaskId { get; set; }
 
     public int UserId { get; set; }
 
@@ -25,7 +25,7 @@ public class TaskActivityLog
     public Team Team { get; set; } = null!;
 
     [JsonIgnore]
-    public TaskItem Task { get; set; } = null!;
+    public TaskItem? Task { get; set; }
 
     [JsonIgnore]
     public User User { get; set; } = null!;

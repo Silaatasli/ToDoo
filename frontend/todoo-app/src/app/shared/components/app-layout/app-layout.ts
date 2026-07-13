@@ -1,17 +1,32 @@
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
+import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
+import { SearchService } from '../../../core/services/search.service';
 import { TeamService } from '../../../core/services/team.service';
 import { UserService } from '../../../core/services/user.service';
+import {
+  GlobalSearchPerson,
+  GlobalSearchResult,
+  GlobalSearchTask,
+  GlobalSearchTeam
+} from '../../../models/search.model';
 import { TeamListItem } from '../../../models/team.model';
 import { UserProfile } from '../../../models/user.model';
 
 const SIDEBAR_KEY = 'todoo_sidebar_collapsed';
 
+type SearchNavItem =
+  | { kind: 'task'; item: GlobalSearchTask }
+  | { kind: 'team'; item: GlobalSearchTeam }
+  | { kind: 'person'; item: GlobalSearchPerson };
+
 @Component({
   selector: 'app-layout',
-  imports: [RouterLink, RouterLinkActive],
+  imports: [RouterLink, RouterLinkActive, ReactiveFormsModule],
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss'
 })
@@ -19,13 +34,22 @@ export class AppLayout implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly teamService = inject(TeamService);
   private readonly userService = inject(UserService);
+  private readonly searchService = inject(SearchService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
   private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly user = this.auth.getUser();
   readonly teams = signal<TeamListItem[]>([]);
   readonly collapsed = signal<boolean>(localStorage.getItem(SIDEBAR_KEY) === '1');
   readonly profile = signal<UserProfile | null>(null);
+
+  readonly searchControl = new FormControl('', { nonNullable: true });
+  readonly searchOpen = signal(false);
+  readonly searchLoading = signal(false);
+  readonly searchResults = signal<GlobalSearchResult | null>(null);
+  readonly searchQuery = signal('');
+  readonly searchActiveIndex = signal(-1);
 
   readonly displayName = computed(() => {
     const p = this.profile();
@@ -41,6 +65,26 @@ export class AppLayout implements OnInit {
     return this.photoCache.photoUrl(p.id);
   });
 
+  readonly hasSearchResults = computed(() => {
+    const results = this.searchResults();
+    if (!results) {
+      return false;
+    }
+    return results.teams.length > 0 || results.tasks.length > 0 || results.people.length > 0;
+  });
+
+  readonly flatSearchItems = computed((): SearchNavItem[] => {
+    const results = this.searchResults();
+    if (!results) {
+      return [];
+    }
+    return [
+      ...results.tasks.map((item): SearchNavItem => ({ kind: 'task', item })),
+      ...results.teams.map((item): SearchNavItem => ({ kind: 'team', item })),
+      ...results.people.map((item): SearchNavItem => ({ kind: 'person', item }))
+    ];
+  });
+
   ngOnInit(): void {
     this.teamService.getTeams().subscribe({
       next: (teams) => this.teams.set(teams),
@@ -54,6 +98,96 @@ export class AppLayout implements OnInit {
       },
       error: () => this.profile.set(null)
     });
+
+    this.searchControl.valueChanges
+      .pipe(
+        debounceTime(250),
+        distinctUntilChanged(),
+        switchMap((raw) => {
+          const query = raw.trim();
+          this.searchQuery.set(query);
+          this.searchActiveIndex.set(-1);
+          if (query.length < 3) {
+            this.searchLoading.set(false);
+            this.searchResults.set(null);
+            return of(null);
+          }
+
+          this.searchLoading.set(true);
+          return this.searchService.search(query).pipe(
+            catchError(() => of<GlobalSearchResult>({ teams: [], tasks: [], people: [] }))
+          );
+        }),
+        takeUntilDestroyed(this.destroyRef)
+      )
+      .subscribe((results) => {
+        this.searchLoading.set(false);
+        this.searchResults.set(results);
+        this.searchActiveIndex.set(results && this.hasAnyResult(results) ? 0 : -1);
+        if (results) {
+          this.photoCache.ensureMany(
+            results.people.map((person) => ({
+              userId: person.id,
+              hasProfilePhoto: person.hasProfilePhoto
+            }))
+          );
+        }
+      });
+  }
+
+  @HostListener('document:click')
+  onDocumentClick(): void {
+    this.searchOpen.set(false);
+  }
+
+  openSearch(event: Event): void {
+    event.stopPropagation();
+    this.searchOpen.set(true);
+  }
+
+  onSearchKeydown(event: KeyboardEvent): void {
+    const items = this.flatSearchItems();
+    const open = this.searchOpen() && this.searchQuery().length > 0;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.searchOpen.set(false);
+      this.searchActiveIndex.set(-1);
+      return;
+    }
+
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      if (!open || items.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      this.searchOpen.set(true);
+      const current = this.searchActiveIndex();
+      const next =
+        event.key === 'ArrowDown'
+          ? (current + 1) % items.length
+          : (current <= 0 ? items.length - 1 : current - 1);
+      this.searchActiveIndex.set(next);
+      this.scrollActiveIntoView();
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      if (!open || items.length === 0) {
+        return;
+      }
+      const index = this.searchActiveIndex();
+      const selected = items[index] ?? items[0];
+      if (!selected) {
+        return;
+      }
+      event.preventDefault();
+      this.activateNavItem(selected);
+    }
+  }
+
+  setSearchActiveIndex(index: number): void {
+    this.searchActiveIndex.set(index);
   }
 
   toggleSidebar(): void {
@@ -69,5 +203,60 @@ export class AppLayout implements OnInit {
 
   teamInitial(name: string): string {
     return name.trim().charAt(0).toUpperCase() || '?';
+  }
+
+  personPhotoUrl(person: GlobalSearchPerson): string | null {
+    return this.photoCache.photoUrl(person.id);
+  }
+
+  selectTeam(team: GlobalSearchTeam, event: Event): void {
+    event.stopPropagation();
+    this.activateNavItem({ kind: 'team', item: team });
+  }
+
+  selectTask(task: GlobalSearchTask, event: Event): void {
+    event.stopPropagation();
+    this.activateNavItem({ kind: 'task', item: task });
+  }
+
+  selectPerson(person: GlobalSearchPerson, event: Event): void {
+    event.stopPropagation();
+    this.activateNavItem({ kind: 'person', item: person });
+  }
+
+  private activateNavItem(entry: SearchNavItem): void {
+    this.closeSearch();
+    if (entry.kind === 'task') {
+      void this.router.navigate(['/teams', entry.item.teamId, 'board'], {
+        queryParams: { taskId: entry.item.id }
+      });
+      return;
+    }
+    if (entry.kind === 'team') {
+      void this.router.navigate(['/teams', entry.item.id, 'board']);
+      return;
+    }
+    void this.router.navigate(['/profile', entry.item.id]);
+  }
+
+  private closeSearch(): void {
+    this.searchOpen.set(false);
+    this.searchControl.setValue('', { emitEvent: false });
+    this.searchQuery.set('');
+    this.searchResults.set(null);
+    this.searchLoading.set(false);
+    this.searchActiveIndex.set(-1);
+  }
+
+  private hasAnyResult(results: GlobalSearchResult): boolean {
+    return results.teams.length > 0 || results.tasks.length > 0 || results.people.length > 0;
+  }
+
+  private scrollActiveIntoView(): void {
+    queueMicrotask(() => {
+      document
+        .querySelector<HTMLElement>('.global-search-item.is-active')
+        ?.scrollIntoView({ block: 'nearest' });
+    });
   }
 }

@@ -56,6 +56,139 @@
 
   <div class="main-panel">
     <header class="main-header">
+      <div class="global-search" (click)="openSearch($event)">
+        <svg class="global-search-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+          <path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+        </svg>
+        <input
+          type="search"
+          class="global-search-input"
+          placeholder="Ara: görev, takım, kişi..."
+          [formControl]="searchControl"
+          (focus)="openSearch($event)"
+          (keydown)="onSearchKeydown($event)"
+          autocomplete="off"
+          role="combobox"
+          aria-label="Global arama"
+          aria-autocomplete="list"
+          aria-controls="global-search-listbox"
+          [attr.aria-expanded]="searchOpen() && searchQuery().length > 0"
+          [attr.aria-activedescendant]="
+            searchActiveIndex() >= 0 ? 'global-search-option-' + searchActiveIndex() : null
+          "
+        />
+
+        @if (searchOpen() && searchQuery().length > 0) {
+          <div
+            id="global-search-listbox"
+            class="global-search-menu"
+            role="listbox"
+            (click)="$event.stopPropagation()"
+          >
+            @if (searchQuery().length < 3) {
+              <p class="global-search-hint">En az 3 karakter yazın</p>
+            } @else if (searchLoading()) {
+              <p class="global-search-hint">Aranıyor...</p>
+            } @else if (!hasSearchResults()) {
+              <p class="global-search-hint">Eşleşen sonuç bulunamadı</p>
+            } @else if (searchResults(); as results) {
+              @if (results.tasks.length > 0) {
+                <section class="global-search-section">
+                  <h3>Görevler</h3>
+                  <ul>
+                    @for (task of results.tasks; track task.id; let taskIndex = $index) {
+                      <li role="presentation">
+                        <button
+                          type="button"
+                          class="global-search-item"
+                          role="option"
+                          [id]="'global-search-option-' + taskIndex"
+                          [attr.aria-selected]="searchActiveIndex() === taskIndex"
+                          [class.is-active]="searchActiveIndex() === taskIndex"
+                          (mouseenter)="setSearchActiveIndex(taskIndex)"
+                          (click)="selectTask(task, $event)"
+                        >
+                          <span class="global-search-item-icon task" aria-hidden="true">✓</span>
+                          <span class="global-search-item-body">
+                            <strong>{{ task.title }}</strong>
+                            <span>{{ task.teamName }} · {{ task.boardColumnTitle }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+
+              @if (results.teams.length > 0) {
+                <section class="global-search-section">
+                  <h3>Takımlar</h3>
+                  <ul>
+                    @for (team of results.teams; track team.id; let i = $index) {
+                      @let teamIndex = results.tasks.length + i;
+                      <li role="presentation">
+                        <button
+                          type="button"
+                          class="global-search-item"
+                          role="option"
+                          [id]="'global-search-option-' + teamIndex"
+                          [attr.aria-selected]="searchActiveIndex() === teamIndex"
+                          [class.is-active]="searchActiveIndex() === teamIndex"
+                          (mouseenter)="setSearchActiveIndex(teamIndex)"
+                          (click)="selectTeam(team, $event)"
+                        >
+                          <span class="global-search-item-icon team">{{ teamInitial(team.name) }}</span>
+                          <span class="global-search-item-body">
+                            <strong>{{ team.name }}</strong>
+                            <span>Takım panosu</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+
+              @if (results.people.length > 0) {
+                <section class="global-search-section">
+                  <h3>Kişiler</h3>
+                  <ul>
+                    @for (person of results.people; track person.id; let i = $index) {
+                      @let personIndex = results.tasks.length + results.teams.length + i;
+                      <li role="presentation">
+                        <button
+                          type="button"
+                          class="global-search-item"
+                          role="option"
+                          [id]="'global-search-option-' + personIndex"
+                          [attr.aria-selected]="searchActiveIndex() === personIndex"
+                          [class.is-active]="searchActiveIndex() === personIndex"
+                          (mouseenter)="setSearchActiveIndex(personIndex)"
+                          (click)="selectPerson(person, $event)"
+                        >
+                          <span class="global-search-item-icon person" [class.has-photo]="!!personPhotoUrl(person)">
+                            @if (personPhotoUrl(person); as url) {
+                              <img [src]="url" [alt]="person.displayName" />
+                            } @else {
+                              {{ teamInitial(person.displayName) }}
+                            }
+                          </span>
+                          <span class="global-search-item-body">
+                            <strong>{{ person.displayName }}</strong>
+                            <span>{{ person.email }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+            }
+          </div>
+        }
+      </div>
+
       <div class="header-actions">
         <a class="user-chip" routerLink="/profile" title="Profilim">
           <span class="user-chip-avatar" [class.has-photo]="!!photoUrl()">

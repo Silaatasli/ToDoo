@@ -165,7 +165,7 @@ export interface TaskAttachment {
 
 export interface TeamActivityLog {
   id: number;
-  taskId: number;
+  taskId: number | null;
   userId: number;
   userEmail: string;
   actionType: TaskActivityAction;

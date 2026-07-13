@@ -112,7 +112,7 @@ namespace Todoo.DataAccess.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
-                    b.Property<int>("TaskId")
+                    b.Property<int?>("TaskId")
                         .HasColumnType("int");
 
                     b.Property<int>("TeamId")
@@ -453,8 +453,7 @@ namespace Todoo.DataAccess.Migrations
                     b.HasOne("Todoo.Entities.Entities.TaskItem", "Task")
                         .WithMany("ActivityLogs")
                         .HasForeignKey("TaskId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.NoAction);
 
                     b.HasOne("Todoo.Entities.Entities.Team", "Team")
                         .WithMany("ActivityLogs")
