@@ -12,6 +12,7 @@ export const routes: Routes = [
   { path: 'login', component: Login },
   { path: 'register', component: Register },
   { path: 'teams', component: TeamList, canActivate: [authGuard] },
+  { path: 'teams/:id/boards/:boardId', component: TeamBoard, canActivate: [authGuard] },
   { path: 'teams/:id/board', component: TeamBoard, canActivate: [authGuard] },
   { path: 'teams/:id/reports', component: TeamReports, canActivate: [authGuard] },
   { path: 'profile', component: Profile, canActivate: [authGuard] },

@@ -13,10 +13,10 @@ public class TeamBoardNotifier : ITeamBoardNotifier
         _hubContext = hubContext;
     }
 
-    public Task NotifyBoardChangedAsync(int teamId, string changeType, int? actorUserId = null, int? taskId = null)
+    public Task NotifyBoardChangedAsync(int teamId, string changeType, int? actorUserId = null, int? taskId = null, int? boardId = null)
     {
         return _hubContext.Clients
             .Group(TeamBoardHub.TeamGroup(teamId))
-            .SendAsync("BoardChanged", new { teamId, changeType, actorUserId, taskId });
+            .SendAsync("BoardChanged", new { teamId, boardId, changeType, actorUserId, taskId });
     }
 }

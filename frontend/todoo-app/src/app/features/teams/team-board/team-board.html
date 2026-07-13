@@ -2,7 +2,42 @@
   <main class="board-page">
     <header class="board-toolbar">
       <div class="board-title">
-        <h1>{{ board()?.teamName ?? 'Takım panosu' }}</h1>
+        <div class="board-heading">
+          <p class="team-name-label">{{ board()?.teamName ?? team()?.name ?? 'Takım' }}</p>
+          <div class="board-switcher" (click)="$event.stopPropagation()">
+            <button
+              type="button"
+              class="board-switcher-trigger"
+              [attr.aria-expanded]="showBoardMenu()"
+              (click)="toggleBoardMenu()"
+            >
+              <h1>{{ board()?.boardName ?? 'Pano' }}</h1>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <path d="M6 9l6 6 6-6" />
+              </svg>
+            </button>
+
+            @if (showBoardMenu()) {
+              <div class="board-switcher-menu">
+                @for (b of boards(); track b.id) {
+                  <button
+                    type="button"
+                    class="board-switcher-option"
+                    [class.active]="b.id === boardId()"
+                    (click)="selectBoard(b)"
+                  >
+                    {{ b.name }}
+                  </button>
+                }
+                @if (isLeader()) {
+                  <button type="button" class="board-switcher-option create" (click)="openBoardModal()">
+                    + Yeni pano
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
         @if (team()) {
           <div class="assignee-filter">
             <button
@@ -111,6 +146,15 @@
         }
         <button type="button" class="secondary-btn" (click)="openMembersModal()">Üyeler</button>
         @if (isLeader()) {
+          <button
+            type="button"
+            class="secondary-btn"
+            (click)="deleteCurrentBoard()"
+            [disabled]="deletingBoard() || boards().length <= 1"
+            title="Bu panoyu sil"
+          >
+            {{ deletingBoard() ? 'Siliniyor...' : 'Panoyu sil' }}
+          </button>
           <button type="button" class="danger-btn" (click)="deleteTeam()" [disabled]="deletingTeam()">
             {{ deletingTeam() ? 'Siliniyor...' : 'Takımı sil' }}
           </button>
@@ -150,6 +194,12 @@
       <div class="state-box">Pano yükleniyor...</div>
     } @else if (error()) {
       <div class="state-box error">{{ error() }}</div>
+    } @else if (filteredBoard() && filteredBoard()!.columns.length === 0) {
+      <div class="empty-board-state">
+        <h2>Bu pano boş</h2>
+        <p>Sütun ekleyerek panoyu yapılandırın. Yeni panolar mevcut panolardan kopyalanmaz.</p>
+        <button type="button" class="primary-btn" (click)="openColumnModal()">+ Sütun ekle</button>
+      </div>
     } @else if (filteredBoard()) {
       <div class="board-columns">
         @for (column of filteredBoard()!.columns; track column.id) {
@@ -334,6 +384,65 @@
           </button>
           <button type="submit" class="primary-btn" [disabled]="savingColumn()">
             {{ savingColumn() ? 'Ekleniyor...' : 'Ekle' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (showBoardModal()) {
+  <div class="modal-backdrop" (click)="closeBoardModal()">
+    <section class="modal-card board-create-card" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Yeni pano</h2>
+        <button type="button" class="icon-btn" (click)="closeBoardModal()" aria-label="Kapat">×</button>
+      </div>
+
+      <form [formGroup]="boardForm" (ngSubmit)="submitBoard()">
+        <label class="field">
+          <span>Pano adı</span>
+          <input type="text" formControlName="name" placeholder="Örn. Sprint 12, Destek" maxlength="200" />
+        </label>
+
+        <div class="field">
+          <span>Pano sütunları</span>
+
+          <div class="column-fields" formArrayName="columns">
+            @for (control of boardColumns.controls; track $index) {
+              <div class="column-field-row">
+                <input
+                  type="text"
+                  [formControlName]="$index"
+                  placeholder="Sütun adı"
+                  maxlength="100"
+                />
+                <button
+                  type="button"
+                  class="remove-column-btn"
+                  (click)="removeBoardColumnField($index)"
+                  [disabled]="boardColumns.length <= 1"
+                  aria-label="Sütunu kaldır"
+                >
+                  ×
+                </button>
+              </div>
+            }
+          </div>
+
+          <button type="button" class="add-column-btn" (click)="addBoardColumnField()">+ Sütun ekle</button>
+        </div>
+
+        @if (boardError()) {
+          <p class="error-box">{{ boardError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeBoardModal()" [disabled]="savingBoard()">
+            İptal
+          </button>
+          <button type="submit" class="primary-btn" [disabled]="savingBoard()">
+            {{ savingBoard() ? 'Oluşturuluyor...' : 'Oluştur' }}
           </button>
         </div>
       </form>

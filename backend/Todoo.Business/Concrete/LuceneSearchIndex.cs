@@ -20,6 +20,7 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
 {
     private const LuceneVersion AppLuceneVersion = LuceneVersion.LUCENE_48;
     private const string TypeTeam = "team";
+    private const string TypeBoard = "board";
     private const string TypeTask = "task";
     private const string TypePerson = "person";
 
@@ -61,6 +62,11 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
         Upsert(DocId(TypeTeam, team.Id), BuildTeamDocument(team));
     }
 
+    public void IndexBoard(Board board, string teamName)
+    {
+        Upsert(DocId(TypeBoard, board.Id), BuildBoardDocument(board, teamName));
+    }
+
     public void IndexTask(TaskItem task, string teamName, string boardColumnTitle)
     {
         Upsert(DocId(TypeTask, task.Id), BuildTaskDocument(task, teamName, boardColumnTitle));
@@ -80,6 +86,8 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
 
     public void RemoveTeam(int teamId) => DeleteByDocId(DocId(TypeTeam, teamId));
 
+    public void RemoveBoard(int boardId) => DeleteByDocId(DocId(TypeBoard, boardId));
+
     public void RemoveTask(int taskId) => DeleteByDocId(DocId(TypeTask, taskId));
 
     public void RemovePerson(int userId) => DeleteByDocId(DocId(TypePerson, userId));
@@ -89,6 +97,15 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
         lock (_sync)
         {
             _writer.DeleteDocuments(BuildTypeAndTeamQuery(TypeTask, teamId));
+            CommitAndRefresh();
+        }
+    }
+
+    public void RemoveBoardsForTeam(int teamId)
+    {
+        lock (_sync)
+        {
+            _writer.DeleteDocuments(BuildTypeAndTeamQuery(TypeBoard, teamId));
             CommitAndRefresh();
         }
     }
@@ -110,12 +127,14 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
                 var textQuery = BuildTextQuery(term);
 
                 var teams = SearchTeams(searcher, textQuery, visibleTeamIds, maxResultsPerSection);
+                var boards = SearchBoards(searcher, textQuery, visibleTeamIds, maxResultsPerSection);
                 var tasks = SearchTasks(searcher, textQuery, visibleTeamIds, maxResultsPerSection);
                 var people = SearchPeople(searcher, textQuery, visibleTeamIds, maxResultsPerSection);
 
                 return new GlobalSearchResultDto
                 {
                     Teams = teams,
+                    Boards = boards,
                     Tasks = tasks,
                     People = people
                 };
@@ -129,6 +148,7 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
 
     public Task RebuildAsync(
         IEnumerable<Team> teams,
+        IEnumerable<(Board Board, string TeamName)> boards,
         IEnumerable<(TaskItem Task, string TeamName, string BoardColumnTitle)> tasks,
         IEnumerable<(User User, IReadOnlyCollection<int> TeamIds)> people,
         CancellationToken cancellationToken = default)
@@ -147,6 +167,12 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
                 }
 
                 _writer.AddDocument(BuildTeamDocument(team));
+            }
+
+            foreach (var (board, teamName) in boards)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                _writer.AddDocument(BuildBoardDocument(board, teamName));
             }
 
             foreach (var (task, teamName, boardColumnTitle) in tasks)
@@ -224,6 +250,22 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
         };
     }
 
+    private static Document BuildBoardDocument(Board board, string teamName)
+    {
+        var name = board.Name ?? string.Empty;
+        return new Document
+        {
+            new StringField("docId", DocId(TypeBoard, board.Id), Field.Store.YES),
+            new StringField("type", TypeBoard, Field.Store.YES),
+            new Int32Field("id", board.Id, Field.Store.YES),
+            new Int32Field("teamId", board.TeamId, Field.Store.YES),
+            new StringField("name", name, Field.Store.YES),
+            new StringField("teamName", teamName ?? string.Empty, Field.Store.YES),
+            new StringField("searchText", NormalizeSearchText(name), Field.Store.NO),
+            new TextField("content", name, Field.Store.NO)
+        };
+    }
+
     private static Document BuildTaskDocument(TaskItem task, string teamName, string boardColumnTitle)
     {
         var title = task.Title ?? string.Empty;
@@ -235,6 +277,7 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
             new StringField("type", TypeTask, Field.Store.YES),
             new Int32Field("id", task.Id, Field.Store.YES),
             new Int32Field("teamId", task.TeamId, Field.Store.YES),
+            new Int32Field("boardId", task.BoardId, Field.Store.YES),
             new StringField("title", title, Field.Store.YES),
             new StringField("teamName", teamName ?? string.Empty, Field.Store.YES),
             new StringField("boardColumnTitle", boardColumnTitle ?? string.Empty, Field.Store.YES),
@@ -323,6 +366,36 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
             .ToList();
     }
 
+    private static List<GlobalSearchBoardDto> SearchBoards(
+        IndexSearcher searcher,
+        Query textQuery,
+        IReadOnlyCollection<int> visibleTeamIds,
+        int maxResults)
+    {
+        var filter = new BooleanQuery
+        {
+            { new TermQuery(new Term("type", TypeBoard)), Occur.MUST },
+            { textQuery, Occur.MUST },
+            { BuildTeamIdFilter(visibleTeamIds, idField: "teamId"), Occur.MUST }
+        };
+
+        var hits = searcher.Search(filter, maxResults * 4).ScoreDocs;
+        var culture = StringComparer.Create(new CultureInfo("tr-TR"), ignoreCase: true);
+
+        return hits
+            .Select(hit => searcher.Doc(hit.Doc))
+            .Select(doc => new GlobalSearchBoardDto
+            {
+                Id = doc.GetField("id").GetInt32Value() ?? 0,
+                Name = doc.Get("name") ?? string.Empty,
+                TeamId = doc.GetField("teamId").GetInt32Value() ?? 0,
+                TeamName = doc.Get("teamName") ?? string.Empty
+            })
+            .OrderBy(board => board.Name, culture)
+            .Take(maxResults)
+            .ToList();
+    }
+
     private static List<GlobalSearchTaskDto> SearchTasks(
         IndexSearcher searcher,
         Query textQuery,
@@ -348,6 +421,7 @@ public sealed class LuceneSearchIndex : ILuceneSearchIndex, IDisposable
                     Title = doc.Get("title") ?? string.Empty,
                     TeamId = doc.GetField("teamId").GetInt32Value() ?? 0,
                     TeamName = doc.Get("teamName") ?? string.Empty,
+                    BoardId = doc.GetField("boardId")?.GetInt32Value() ?? 0,
                     BoardColumnTitle = doc.Get("boardColumnTitle") ?? string.Empty
                 },
                 CreatedTicks = doc.GetField("createdTicks").GetInt64Value() ?? 0

@@ -9,6 +9,7 @@ import { SearchService } from '../../../core/services/search.service';
 import { TeamService } from '../../../core/services/team.service';
 import { UserService } from '../../../core/services/user.service';
 import {
+  GlobalSearchBoard,
   GlobalSearchPerson,
   GlobalSearchResult,
   GlobalSearchTask,
@@ -21,6 +22,7 @@ const SIDEBAR_KEY = 'todoo_sidebar_collapsed';
 
 type SearchNavItem =
   | { kind: 'task'; item: GlobalSearchTask }
+  | { kind: 'board'; item: GlobalSearchBoard }
   | { kind: 'team'; item: GlobalSearchTeam }
   | { kind: 'person'; item: GlobalSearchPerson };
 
@@ -70,7 +72,10 @@ export class AppLayout implements OnInit {
     if (!results) {
       return false;
     }
-    return results.teams.length > 0 || results.tasks.length > 0 || results.people.length > 0;
+    return results.teams.length > 0
+      || results.boards.length > 0
+      || results.tasks.length > 0
+      || results.people.length > 0;
   });
 
   readonly flatSearchItems = computed((): SearchNavItem[] => {
@@ -80,6 +85,7 @@ export class AppLayout implements OnInit {
     }
     return [
       ...results.tasks.map((item): SearchNavItem => ({ kind: 'task', item })),
+      ...results.boards.map((item): SearchNavItem => ({ kind: 'board', item })),
       ...results.teams.map((item): SearchNavItem => ({ kind: 'team', item })),
       ...results.people.map((item): SearchNavItem => ({ kind: 'person', item }))
     ];
@@ -115,7 +121,7 @@ export class AppLayout implements OnInit {
 
           this.searchLoading.set(true);
           return this.searchService.search(query).pipe(
-            catchError(() => of<GlobalSearchResult>({ teams: [], tasks: [], people: [] }))
+            catchError(() => of<GlobalSearchResult>({ teams: [], boards: [], tasks: [], people: [] }))
           );
         }),
         takeUntilDestroyed(this.destroyRef)
@@ -214,6 +220,11 @@ export class AppLayout implements OnInit {
     this.activateNavItem({ kind: 'team', item: team });
   }
 
+  selectBoard(board: GlobalSearchBoard, event: Event): void {
+    event.stopPropagation();
+    this.activateNavItem({ kind: 'board', item: board });
+  }
+
   selectTask(task: GlobalSearchTask, event: Event): void {
     event.stopPropagation();
     this.activateNavItem({ kind: 'task', item: task });
@@ -227,9 +238,16 @@ export class AppLayout implements OnInit {
   private activateNavItem(entry: SearchNavItem): void {
     this.closeSearch();
     if (entry.kind === 'task') {
-      void this.router.navigate(['/teams', entry.item.teamId, 'board'], {
+      const boardPath = entry.item.boardId
+        ? ['/teams', entry.item.teamId, 'boards', entry.item.boardId]
+        : ['/teams', entry.item.teamId, 'board'];
+      void this.router.navigate(boardPath, {
         queryParams: { taskId: entry.item.id }
       });
+      return;
+    }
+    if (entry.kind === 'board') {
+      void this.router.navigate(['/teams', entry.item.teamId, 'boards', entry.item.id]);
       return;
     }
     if (entry.kind === 'team') {
@@ -249,7 +267,10 @@ export class AppLayout implements OnInit {
   }
 
   private hasAnyResult(results: GlobalSearchResult): boolean {
-    return results.teams.length > 0 || results.tasks.length > 0 || results.people.length > 0;
+    return results.teams.length > 0
+      || results.boards.length > 0
+      || results.tasks.length > 0
+      || results.people.length > 0;
   }
 
   private scrollActiveIntoView(): void {

@@ -9,4 +9,7 @@ public class CreateTeamRequestDto
     public string Name { get; set; } = string.Empty;
 
     public List<string>? ColumnTitles { get; set; }
+
+    [MaxLength(200, ErrorMessage = "Pano adi en fazla 200 karakter olabilir.")]
+    public string? BoardName { get; set; }
 }

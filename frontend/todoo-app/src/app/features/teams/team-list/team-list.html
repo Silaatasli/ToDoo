@@ -45,62 +45,156 @@
 
 @if (showCreateModal()) {
   <div class="modal-backdrop" (click)="closeCreateModal()">
-    <section class="modal-card" (click)="$event.stopPropagation()">
+    <section class="modal-card create-team-card" (click)="$event.stopPropagation()">
       <div class="modal-header">
         <h2>Yeni takım</h2>
         <button type="button" class="icon-btn" (click)="closeCreateModal()" aria-label="Kapat">×</button>
       </div>
 
-      <p class="modal-subtitle">Takım adını gir.</p>
+      <div class="step-indicator" aria-hidden="true">
+        <span [class.active]="createStep() === 1">1. Pano</span>
+        <span class="step-sep">→</span>
+        <span [class.active]="createStep() === 2">2. Üyeler</span>
+      </div>
 
-      <form [formGroup]="createForm" (ngSubmit)="submitCreate()">
-        <label class="field">
-          <span>Takım adı</span>
-          <input type="text" formControlName="name" placeholder="Örn. Dev Squad" maxlength="200" />
-        </label>
+      @if (createStep() === 1) {
+        <p class="modal-subtitle">Takım adı, ilk pano ve sütunlarını ayarla.</p>
 
-        <div class="field">
-          <span>Pano sütunları</span>
-          <p class="field-hint">Varsayılan sütunlar hazır. İstersen adlarını değiştir, ekle veya kaldır.</p>
+        <form [formGroup]="createForm" (ngSubmit)="goToMembersStep()">
+          <label class="field">
+            <span>Takım adı</span>
+            <input type="text" formControlName="name" placeholder="Örn. Dev Squad" maxlength="200" />
+          </label>
 
-          <div class="column-fields" formArrayName="columns">
-            @for (control of columns.controls; track $index) {
-              <div class="column-field-row">
-                <input
-                  type="text"
-                  [formControlName]="$index"
-                  placeholder="Sütun adı"
-                  maxlength="100"
-                />
-                <button
-                  type="button"
-                  class="remove-column-btn"
-                  (click)="removeColumnField($index)"
-                  [disabled]="columns.length <= 1"
-                  aria-label="Sütunu kaldır"
-                >
-                  ×
-                </button>
+          <label class="field">
+            <span>İlk pano adı</span>
+            <input type="text" formControlName="boardName" placeholder="Örn. Ana pano" maxlength="200" />
+          </label>
+
+          <div class="field">
+            <span>Pano sütunları</span>
+            <p class="field-hint">İlk panonun varsayılan sütunları. İstersen adlarını değiştir, ekle veya kaldır.</p>
+
+            <div class="column-fields" formArrayName="columns">
+              @for (control of columns.controls; track $index) {
+                <div class="column-field-row">
+                  <input
+                    type="text"
+                    [formControlName]="$index"
+                    placeholder="Sütun adı"
+                    maxlength="100"
+                  />
+                  <button
+                    type="button"
+                    class="remove-column-btn"
+                    (click)="removeColumnField($index)"
+                    [disabled]="columns.length <= 1"
+                    aria-label="Sütunu kaldır"
+                  >
+                    ×
+                  </button>
+                </div>
+              }
+            </div>
+
+            <button type="button" class="add-column-btn" (click)="addColumnField()">+ Sütun ekle</button>
+          </div>
+
+          @if (createError()) {
+            <p class="error-box">{{ createError() }}</p>
+          }
+
+          <div class="modal-actions">
+            <button type="button" class="secondary-btn" (click)="closeCreateModal()" [disabled]="creating()">
+              İptal
+            </button>
+            <button type="submit" class="primary-btn">İleri</button>
+          </div>
+        </form>
+      } @else {
+        <p class="modal-subtitle">İstersen şimdi üye ekle. Bu adımı atlayabilirsin.</p>
+
+        <div class="field member-search-field">
+          <span>Üye ekle</span>
+          <div class="member-search" (click)="$event.stopPropagation()">
+            <input
+              type="search"
+              [formControl]="memberSearchControl"
+              placeholder="Ad soyad ile ara (en az 3 harf)"
+              autocomplete="off"
+              (input)="onMemberSearchInput()"
+              (focus)="onMemberSearchFocus()"
+            />
+
+            @if (showMemberSearchResults() && memberSearchControl.value.trim().length >= 3) {
+              <div class="member-search-results">
+                @if (memberSearchLoading()) {
+                  <p class="member-search-hint">Aranıyor...</p>
+                } @else if (memberSearchResults().length === 0) {
+                  <p class="member-search-hint">Eşleşen kullanıcı bulunamadı.</p>
+                } @else {
+                  <ul class="member-search-list">
+                    @for (user of memberSearchResults(); track user.id) {
+                      <li>
+                        <button type="button" class="member-search-option" (click)="selectMemberFromSearch(user)">
+                          <span class="member-avatar">{{ teamInitial(user.displayName) }}</span>
+                          <span class="member-search-info">
+                            <span class="member-search-name">{{ user.displayName }}</span>
+                            <span class="member-search-email">{{ user.email }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
               </div>
             }
           </div>
-
-          <button type="button" class="add-column-btn" (click)="addColumnField()">+ Sütun ekle</button>
         </div>
+
+        @if (pendingMembers().length > 0) {
+          <ul class="pending-members">
+            @for (member of pendingMembers(); track member.id) {
+              <li>
+                <div class="pending-member-info">
+                  <span class="member-avatar">{{ teamInitial(member.displayName) }}</span>
+                  <div>
+                    <strong>{{ member.displayName }}</strong>
+                    <span>{{ member.email }}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  class="remove-column-btn"
+                  (click)="removePendingMember(member.id)"
+                  aria-label="Üyeyi kaldır"
+                >
+                  ×
+                </button>
+              </li>
+            }
+          </ul>
+        } @else {
+          <p class="field-hint alone">Henüz üye eklenmedi. Sadece sen lider olarak ekleneceksin.</p>
+        }
+
+        @if (memberError()) {
+          <p class="error-box">{{ memberError() }}</p>
+        }
 
         @if (createError()) {
           <p class="error-box">{{ createError() }}</p>
         }
 
         <div class="modal-actions">
-          <button type="button" class="secondary-btn" (click)="closeCreateModal()" [disabled]="creating()">
-            İptal
+          <button type="button" class="secondary-btn" (click)="backToBoardStep()" [disabled]="creating()">
+            Geri
           </button>
-          <button type="submit" class="primary-btn" [disabled]="creating()">
-            {{ creating() ? 'Oluşturuluyor...' : 'Oluştur' }}
+          <button type="button" class="primary-btn" (click)="submitCreate()" [disabled]="creating()">
+            {{ creating() ? 'Oluşturuluyor...' : 'Takımı oluştur' }}
           </button>
         </div>
-      </form>
+      }
     </section>
   </div>
 }

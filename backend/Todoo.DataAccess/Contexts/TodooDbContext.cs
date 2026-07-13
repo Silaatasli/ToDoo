@@ -14,6 +14,7 @@ public class TodooDbContext : DbContext
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamMember> TeamMembers => Set<TeamMember>();
+    public DbSet<Board> Boards => Set<Board>();
     public DbSet<TeamBoardColumn> TeamBoardColumns => Set<TeamBoardColumn>();
     public DbSet<TaskActivityLog> TaskActivityLogs => Set<TaskActivityLog>();
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
@@ -94,15 +95,26 @@ public class TodooDbContext : DbContext
             .HasForeignKey(member => member.UserId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        modelBuilder.Entity<Board>()
+            .Property(board => board.Name)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        modelBuilder.Entity<Board>()
+            .HasOne(board => board.Team)
+            .WithMany(team => team.Boards)
+            .HasForeignKey(board => board.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<TeamBoardColumn>()
             .Property(column => column.Title)
             .HasMaxLength(100)
             .IsRequired();
 
         modelBuilder.Entity<TeamBoardColumn>()
-            .HasOne(column => column.Team)
-            .WithMany(team => team.BoardColumns)
-            .HasForeignKey(column => column.TeamId)
+            .HasOne(column => column.Board)
+            .WithMany(board => board.Columns)
+            .HasForeignKey(column => column.BoardId)
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<TaskItem>()
@@ -115,6 +127,12 @@ public class TodooDbContext : DbContext
             .WithMany(team => team.Tasks)
             .HasForeignKey(task => task.TeamId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TaskItem>()
+            .HasOne(task => task.Board)
+            .WithMany(board => board.Tasks)
+            .HasForeignKey(task => task.BoardId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<TaskItem>()
             .HasOne(task => task.BoardColumn)

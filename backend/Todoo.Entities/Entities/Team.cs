@@ -26,7 +26,7 @@ public class Team
     public ICollection<TeamMember> Members { get; set; } = [];
 
     [JsonIgnore]
-    public ICollection<TeamBoardColumn> BoardColumns { get; set; } = [];
+    public ICollection<Board> Boards { get; set; } = [];
 
     [JsonIgnore]
     public ICollection<TaskItem> Tasks { get; set; } = [];

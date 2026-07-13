@@ -121,12 +121,41 @@
                 </section>
               }
 
+              @if (results.boards.length > 0) {
+                <section class="global-search-section">
+                  <h3>Panolar</h3>
+                  <ul>
+                    @for (board of results.boards; track board.id; let i = $index) {
+                      @let boardIndex = results.tasks.length + i;
+                      <li role="presentation">
+                        <button
+                          type="button"
+                          class="global-search-item"
+                          role="option"
+                          [id]="'global-search-option-' + boardIndex"
+                          [attr.aria-selected]="searchActiveIndex() === boardIndex"
+                          [class.is-active]="searchActiveIndex() === boardIndex"
+                          (mouseenter)="setSearchActiveIndex(boardIndex)"
+                          (click)="selectBoard(board, $event)"
+                        >
+                          <span class="global-search-item-icon board" aria-hidden="true">▦</span>
+                          <span class="global-search-item-body">
+                            <strong>{{ board.name }}</strong>
+                            <span>{{ board.teamName }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                </section>
+              }
+
               @if (results.teams.length > 0) {
                 <section class="global-search-section">
                   <h3>Takımlar</h3>
                   <ul>
                     @for (team of results.teams; track team.id; let i = $index) {
-                      @let teamIndex = results.tasks.length + i;
+                      @let teamIndex = results.tasks.length + results.boards.length + i;
                       <li role="presentation">
                         <button
                           type="button"
@@ -141,7 +170,7 @@
                           <span class="global-search-item-icon team">{{ teamInitial(team.name) }}</span>
                           <span class="global-search-item-body">
                             <strong>{{ team.name }}</strong>
-                            <span>Takım panosu</span>
+                            <span>Takım</span>
                           </span>
                         </button>
                       </li>
@@ -155,7 +184,7 @@
                   <h3>Kişiler</h3>
                   <ul>
                     @for (person of results.people; track person.id; let i = $index) {
-                      @let personIndex = results.tasks.length + results.teams.length + i;
+                      @let personIndex = results.tasks.length + results.boards.length + results.teams.length + i;
                       <li role="presentation">
                         <button
                           type="button"

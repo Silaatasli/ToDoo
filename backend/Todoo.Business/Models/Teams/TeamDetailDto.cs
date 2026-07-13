@@ -14,5 +14,7 @@ public class TeamDetailDto
 
     public List<TeamMemberDto> Members { get; set; } = [];
 
+    public List<BoardListDto> Boards { get; set; } = [];
+
     public List<TeamBoardColumnDto> BoardColumns { get; set; } = [];
 }

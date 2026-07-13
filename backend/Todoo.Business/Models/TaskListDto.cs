@@ -28,6 +28,10 @@ public class TaskListDto
 
     public bool IsPersonalTeam { get; set; }
 
+    public int BoardId { get; set; }
+
+    public string? BoardName { get; set; }
+
     public int BoardColumnId { get; set; }
 
     public string? BoardColumnTitle { get; set; }

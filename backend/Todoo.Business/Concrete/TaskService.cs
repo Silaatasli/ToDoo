@@ -85,6 +85,7 @@ public class TaskService : ITaskService
     public async Task<ServiceResult<TaskListDto>> CreateTeamTaskAsync(
         TaskItem task,
         int teamId,
+        int boardId,
         int? boardColumnId,
         int? assignedToUserId,
         int userId)
@@ -100,6 +101,12 @@ public class TaskService : ITaskService
             return ServiceResult<TaskListDto>.Fail("Bu takimin uyesi degilsiniz.", ServiceErrorKind.Forbidden);
         }
 
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null || board.TeamId != teamId)
+        {
+            return ServiceResult<TaskListDto>.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
         var categoryResult = await ResolveCategoryIdAsync(task.CategoryId);
         if (!categoryResult.Success)
         {
@@ -107,13 +114,13 @@ public class TaskService : ITaskService
         }
 
         var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
+            .Where(column => column.BoardId == boardId)
             .OrderBy(column => column.DisplayOrder)
             .ToList();
 
         if (columns.Count == 0)
         {
-            return ServiceResult<TaskListDto>.Fail("Takimin pano sutunu bulunamadi.");
+            return ServiceResult<TaskListDto>.Fail("Panoda sutun bulunamadi.");
         }
 
         TeamBoardColumn? targetColumn;
@@ -122,7 +129,8 @@ public class TaskService : ITaskService
             targetColumn = columns.FirstOrDefault(column => column.Id == boardColumnId.Value);
             if (targetColumn is null)
             {
-                return ServiceResult<TaskListDto>.Fail($"Gecersiz boardColumnId: {boardColumnId}. GET /api/teams/{teamId}/board ile bu takima ait sutun id'lerini kontrol et");
+                return ServiceResult<TaskListDto>.Fail(
+                    $"Gecersiz boardColumnId: {boardColumnId}. GET /api/teams/{teamId}/boards/{boardId} ile bu panoya ait sutun id'lerini kontrol et");
             }
         }
         else
@@ -136,6 +144,7 @@ public class TaskService : ITaskService
         }
 
         task.TeamId = teamId;
+        task.BoardId = boardId;
         task.BoardColumnId = targetColumn.Id;
         task.CreatedByUserId = userId;
         task.AssignedToUserId = assignedToUserId;
@@ -155,7 +164,7 @@ public class TaskService : ITaskService
             await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.Assigned, null, assigneeName);
         }
 
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskCreated, userId, task.Id);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskCreated, userId, task.Id, boardId);
         await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
@@ -189,7 +198,7 @@ public class TaskService : ITaskService
         await _unitOfWork.SaveChangesAsync();
 
         await LogActivityAsync(existingTask.TeamId, existingTask.Id, userId, TaskActivityAction.Updated, null, existingTask.Title);
-        await _boardNotifier.NotifyBoardChangedAsync(existingTask.TeamId, TeamBoardChangeTypes.TaskUpdated, userId, existingTask.Id);
+        await _boardNotifier.NotifyBoardChangedAsync(existingTask.TeamId, TeamBoardChangeTypes.TaskUpdated, userId, existingTask.Id, existingTask.BoardId);
         await IndexTaskDocumentAsync(existingTask);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(existingTask));
@@ -212,10 +221,10 @@ public class TaskService : ITaskService
             return ServiceResult<TaskListDto>.Fail("Pano sutunu bulunamadi.", ServiceErrorKind.NotFound);
         }
 
-        if (newColumn.TeamId != task.TeamId)
+        if (newColumn.BoardId != task.BoardId)
         {
             return ServiceResult<TaskListDto>.Fail(
-                $"boardColumnId {boardColumnId} bu gorevin takimina (teamId: {task.TeamId}) ait degil.");
+                $"boardColumnId {boardColumnId} bu gorevin panosuna (boardId: {task.BoardId}) ait degil.");
         }
 
         return await ApplyColumnChangeAsync(task, newColumn, userId);
@@ -232,11 +241,11 @@ public class TaskService : ITaskService
         }
 
         var task = taskResult.Data!;
-        var columns = await GetTeamColumnsAsync(task.TeamId);
+        var columns = await GetBoardColumnsAsync(task.BoardId);
         var completedColumn = columns.FirstOrDefault(column => column.IsCompletedColumn);
         if (completedColumn is null)
         {
-            return ServiceResult<TaskListDto>.Fail("Bu gorevin takiminda tamamlandi sutunu bulunamadi.");
+            return ServiceResult<TaskListDto>.Fail("Bu gorevin panosunda tamamlandi sutunu bulunamadi.");
         }
 
         return await ApplyColumnChangeAsync(task, completedColumn, userId);
@@ -253,11 +262,11 @@ public class TaskService : ITaskService
         }
 
         var task = taskResult.Data!;
-        var columns = await GetTeamColumnsAsync(task.TeamId);
+        var columns = await GetBoardColumnsAsync(task.BoardId);
         var activeColumn = columns.FirstOrDefault(column => !column.IsCompletedColumn);
         if (activeColumn is null)
         {
-            return ServiceResult<TaskListDto>.Fail("Bu gorevin takiminda aktif sutun bulunamadi.");
+            return ServiceResult<TaskListDto>.Fail("Bu gorevin panosunda aktif sutun bulunamadi.");
         }
 
         return await ApplyColumnChangeAsync(task, activeColumn, userId);
@@ -295,7 +304,7 @@ public class TaskService : ITaskService
         var newAssigneeName = newAssignee is null ? null : UserDisplayNameHelper.Format(newAssignee);
 
         await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.Assigned, oldAssigneeName, newAssigneeName);
-        await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskAssigned, userId, task.Id);
+        await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskAssigned, userId, task.Id, task.BoardId);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }
@@ -323,7 +332,7 @@ public class TaskService : ITaskService
 
         MarkAssignmentAccepted(task);
 
-        var columns = await GetTeamColumnsAsync(task.TeamId);
+        var columns = await GetBoardColumnsAsync(task.BoardId);
         var inProgressColumn = FindInProgressColumn(columns);
         if (inProgressColumn is not null && inProgressColumn.Id != task.BoardColumnId)
         {
@@ -341,7 +350,8 @@ public class TaskService : ITaskService
             task.TeamId,
             TeamBoardChangeTypes.TaskAssignmentAccepted,
             userId,
-            task.Id);
+            task.Id,
+            task.BoardId);
         await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
@@ -382,7 +392,8 @@ public class TaskService : ITaskService
             task.TeamId,
             TeamBoardChangeTypes.TaskAssignmentDeclined,
             userId,
-            task.Id);
+            task.Id,
+            task.BoardId);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }
@@ -399,6 +410,7 @@ public class TaskService : ITaskService
 
         var task = taskResult.Data!;
         var teamId = task.TeamId;
+        var boardId = task.BoardId;
         var title = task.Title;
 
         var comments = (await _unitOfWork.TaskComments.GetAllAsync())
@@ -464,7 +476,7 @@ public class TaskService : ITaskService
             }
         }
 
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId, boardId);
         _searchIndex.RemoveTask(taskId);
         return ServiceResult.Ok();
     }
@@ -485,10 +497,10 @@ public class TaskService : ITaskService
         return ServiceResult<TaskItem>.Ok(task);
     }
 
-    private async Task<List<TeamBoardColumn>> GetTeamColumnsAsync(int teamId)
+    private async Task<List<TeamBoardColumn>> GetBoardColumnsAsync(int boardId)
     {
         return (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
+            .Where(column => column.BoardId == boardId)
             .OrderBy(column => column.DisplayOrder)
             .ToList();
     }
@@ -515,7 +527,7 @@ public class TaskService : ITaskService
             oldTitle,
             newColumn.Title);
 
-        await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskMoved, userId, task.Id);
+        await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskMoved, userId, task.Id, task.BoardId);
         await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
@@ -607,6 +619,8 @@ public class TaskService : ITaskService
             TeamId = listDto.TeamId,
             TeamName = listDto.TeamName,
             IsPersonalTeam = listDto.IsPersonalTeam,
+            BoardId = listDto.BoardId,
+            BoardName = listDto.BoardName,
             BoardColumnId = listDto.BoardColumnId,
             BoardColumnTitle = listDto.BoardColumnTitle ?? string.Empty,
             Title = listDto.Title,
@@ -635,11 +649,18 @@ public class TaskService : ITaskService
         }
 
         string? boardColumnTitle = null;
+        string? boardName = null;
         string? assignedToEmail = null;
         var column = await _unitOfWork.TeamBoardColumns.GetByIdAsync(task.BoardColumnId);
         if (column is not null)
         {
             boardColumnTitle = column.Title;
+        }
+
+        var board = await _unitOfWork.Boards.GetByIdAsync(task.BoardId);
+        if (board is not null)
+        {
+            boardName = board.Name;
         }
 
         if (task.AssignedToUserId.HasValue)
@@ -663,6 +684,8 @@ public class TaskService : ITaskService
             TeamId = task.TeamId,
             TeamName = team?.Name,
             IsPersonalTeam = team?.IsPersonal ?? false,
+            BoardId = task.BoardId,
+            BoardName = boardName,
             BoardColumnId = task.BoardColumnId,
             BoardColumnTitle = boardColumnTitle,
             AssignedToUserId = task.AssignedToUserId,

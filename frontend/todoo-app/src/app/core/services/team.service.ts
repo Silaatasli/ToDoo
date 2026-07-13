@@ -6,6 +6,8 @@ import {
   AddColumnRequest,
   AddMemberRequest,
   BoardColumn,
+  BoardListItem,
+  CreateBoardRequest,
   CreateTeamRequest,
   CreateTeamTaskRequest,
   ReorderColumnsRequest,
@@ -37,20 +39,45 @@ export class TeamService {
     return this.http.delete<void>(`${this.baseUrl}/${id}`);
   }
 
-  getBoard(id: number): Observable<TeamBoard> {
-    return this.http.get<TeamBoard>(`${this.baseUrl}/${id}/board`);
+  getBoards(teamId: number): Observable<BoardListItem[]> {
+    return this.http.get<BoardListItem[]>(`${this.baseUrl}/${teamId}/boards`);
   }
 
-  addColumn(id: number, request: AddColumnRequest): Observable<BoardColumn> {
-    return this.http.post<BoardColumn>(`${this.baseUrl}/${id}/columns`, request);
+  createBoard(teamId: number, request: CreateBoardRequest): Observable<BoardListItem> {
+    return this.http.post<BoardListItem>(`${this.baseUrl}/${teamId}/boards`, request);
   }
 
-  updateColumn(id: number, columnId: number, request: AddColumnRequest): Observable<BoardColumn> {
-    return this.http.put<BoardColumn>(`${this.baseUrl}/${id}/columns/${columnId}`, request);
+  deleteBoard(teamId: number, boardId: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${teamId}/boards/${boardId}`);
   }
 
-  reorderColumns(id: number, request: ReorderColumnsRequest): Observable<void> {
-    return this.http.put<void>(`${this.baseUrl}/${id}/columns/reorder`, request);
+  getBoard(teamId: number, boardId: number): Observable<TeamBoard> {
+    return this.http.get<TeamBoard>(`${this.baseUrl}/${teamId}/boards/${boardId}`);
+  }
+
+  /** First board (DisplayOrder) — used for legacy redirects. */
+  getDefaultBoard(teamId: number): Observable<TeamBoard> {
+    return this.http.get<TeamBoard>(`${this.baseUrl}/${teamId}/board`);
+  }
+
+  addColumn(teamId: number, boardId: number, request: AddColumnRequest): Observable<BoardColumn> {
+    return this.http.post<BoardColumn>(`${this.baseUrl}/${teamId}/boards/${boardId}/columns`, request);
+  }
+
+  updateColumn(
+    teamId: number,
+    boardId: number,
+    columnId: number,
+    request: AddColumnRequest
+  ): Observable<BoardColumn> {
+    return this.http.put<BoardColumn>(
+      `${this.baseUrl}/${teamId}/boards/${boardId}/columns/${columnId}`,
+      request
+    );
+  }
+
+  reorderColumns(teamId: number, boardId: number, request: ReorderColumnsRequest): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/${teamId}/boards/${boardId}/columns/reorder`, request);
   }
 
   addMember(id: number, request: AddMemberRequest): Observable<{ success: boolean; message: string }> {
@@ -61,8 +88,8 @@ export class TeamService {
     return this.http.delete<void>(`${this.baseUrl}/${id}/members/${memberUserId}`);
   }
 
-  createTask(id: number, request: CreateTeamTaskRequest): Observable<TaskListItem> {
-    return this.http.post<TaskListItem>(`${this.baseUrl}/${id}/tasks`, request);
+  createTask(teamId: number, boardId: number, request: CreateTeamTaskRequest): Observable<TaskListItem> {
+    return this.http.post<TaskListItem>(`${this.baseUrl}/${teamId}/boards/${boardId}/tasks`, request);
   }
 
   getActivity(id: number): Observable<TeamActivityLog[]> {

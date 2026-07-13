@@ -5,13 +5,17 @@ namespace Todoo.Business.Abstract;
 
 public interface ITeamService
 {
-    Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(string name, IReadOnlyList<string>? columnTitles, int userId);
+    Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(string name, string? boardName, IReadOnlyList<string>? columnTitles, int userId);
     Task<IEnumerable<TeamListDto>> GetTeamsForUserAsync(int userId);
     Task<ServiceResult<TeamDetailDto>> GetTeamByIdAsync(int teamId, int userId);
+    Task<ServiceResult<IEnumerable<BoardListDto>>> GetBoardsAsync(int teamId, int userId);
+    Task<ServiceResult<BoardListDto>> CreateBoardAsync(int teamId, string name, IReadOnlyList<string>? columnTitles, int userId);
+    Task<ServiceResult> DeleteBoardAsync(int teamId, int boardId, int userId);
+    Task<ServiceResult<TeamBoardDto>> GetBoardAsync(int teamId, int boardId, int userId);
     Task<ServiceResult<TeamBoardDto>> GetTeamBoardAsync(int teamId, int userId);
-    Task<ServiceResult<TeamBoardColumnDto>> AddBoardColumnAsync(int teamId, string title, int userId);
-    Task<ServiceResult<TeamBoardColumnDto>> UpdateBoardColumnAsync(int teamId, int columnId, string title, int userId);
-    Task<ServiceResult> ReorderBoardColumnsAsync(int teamId, IReadOnlyList<int> orderedColumnIds, int userId);
+    Task<ServiceResult<TeamBoardColumnDto>> AddBoardColumnAsync(int teamId, int boardId, string title, int userId);
+    Task<ServiceResult<TeamBoardColumnDto>> UpdateBoardColumnAsync(int teamId, int boardId, int columnId, string title, int userId);
+    Task<ServiceResult> ReorderBoardColumnsAsync(int teamId, int boardId, IReadOnlyList<int> orderedColumnIds, int userId);
     Task<ServiceResult> DeleteTeamAsync(int teamId, int userId);
     Task<ServiceResult> AddMemberAsync(int teamId, string email, int userId);
     Task<ServiceResult> RemoveMemberAsync(int teamId, int memberUserId, int userId);

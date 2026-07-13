@@ -36,7 +36,7 @@ public class TeamsController : ControllerBase
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _teamService.CreateTeamAsync(request.Name, request.ColumnTitles, userId);
+        var result = await _teamService.CreateTeamAsync(request.Name, request.BoardName, request.ColumnTitles, userId);
         return result.ToActionResult(team => CreatedAtAction(nameof(GetById), new { id = team.Id }, team));
     }
 
@@ -76,6 +76,55 @@ public class TeamsController : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpGet("{id:int}/boards")]
+    public async Task<IActionResult> GetBoards(int id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _teamService.GetBoardsAsync(id, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:int}/boards")]
+    public async Task<IActionResult> CreateBoard(int id, [FromBody] CreateBoardRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _teamService.CreateBoardAsync(id, request.Name, request.ColumnTitles, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("{id:int}/boards/{boardId:int}")]
+    public async Task<IActionResult> DeleteBoard(int id, int boardId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _teamService.DeleteBoardAsync(id, boardId, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("{id:int}/boards/{boardId:int}")]
+    public async Task<IActionResult> GetBoardById(int id, int boardId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _teamService.GetBoardAsync(id, boardId, userId);
+        return result.ToActionResult();
+    }
+
+    /// <summary>Backward-compatible: returns the first board by DisplayOrder. </summary>
     [HttpGet("{id:int}/board")]
     public async Task<IActionResult> GetBoard(int id)
     {
@@ -88,40 +137,69 @@ public class TeamsController : ControllerBase
         return result.ToActionResult();
     }
 
-    [HttpPost("{id:int}/columns")]
-    public async Task<IActionResult> AddColumn(int id, [FromBody] AddBoardColumnRequestDto request)
+    [HttpPost("{id:int}/boards/{boardId:int}/columns")]
+    public async Task<IActionResult> AddColumn(int id, int boardId, [FromBody] AddBoardColumnRequestDto request)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _teamService.AddBoardColumnAsync(id, request.Title, userId);
+        var result = await _teamService.AddBoardColumnAsync(id, boardId, request.Title, userId);
         return result.ToActionResult();
     }
 
-    [HttpPut("{id:int}/columns/{columnId:int}")]
-    public async Task<IActionResult> UpdateColumn(int id, int columnId, [FromBody] AddBoardColumnRequestDto request)
+    [HttpPut("{id:int}/boards/{boardId:int}/columns/{columnId:int}")]
+    public async Task<IActionResult> UpdateColumn(int id, int boardId, int columnId, [FromBody] AddBoardColumnRequestDto request)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _teamService.UpdateBoardColumnAsync(id, columnId, request.Title, userId);
+        var result = await _teamService.UpdateBoardColumnAsync(id, boardId, columnId, request.Title, userId);
         return result.ToActionResult();
     }
 
-    [HttpPut("{id:int}/columns/reorder")]
-    public async Task<IActionResult> ReorderColumns(int id, [FromBody] ReorderBoardColumnsRequestDto request)
+    [HttpPut("{id:int}/boards/{boardId:int}/columns/reorder")]
+    public async Task<IActionResult> ReorderColumns(int id, int boardId, [FromBody] ReorderBoardColumnsRequestDto request)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _teamService.ReorderBoardColumnsAsync(id, request.ColumnIds, userId);
+        var result = await _teamService.ReorderBoardColumnsAsync(id, boardId, request.ColumnIds, userId);
         return result.ToActionResult();
+    }
+
+    [HttpPost("{id:int}/boards/{boardId:int}/tasks")]
+    public async Task<IActionResult> CreateBoardTask(int id, int boardId, [FromBody] CreateTeamTaskRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var task = new TaskItem
+        {
+            Title = request.Title,
+            Description = request.Description,
+            CategoryId = request.CategoryId,
+            Priority = request.Priority,
+            StartDate = request.StartDate,
+            DueDate = request.DueDate
+        };
+
+        var result = await _taskService.CreateTeamTaskAsync(
+            task,
+            id,
+            boardId,
+            request.BoardColumnId,
+            request.AssignedToUserId,
+            userId);
+
+        return result.ToActionResult(createdTask => Ok(createdTask));
     }
 
     [HttpPost("{id:int}/members")]
@@ -146,34 +224,6 @@ public class TeamsController : ControllerBase
 
         var result = await _teamService.RemoveMemberAsync(id, memberUserId, userId);
         return result.ToActionResult();
-    }
-
-    [HttpPost("{id:int}/tasks")]
-    public async Task<IActionResult> CreateTask(int id, [FromBody] CreateTeamTaskRequestDto request)
-    {
-        if (!TryGetUserId(out var userId))
-        {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
-        }
-
-        var task = new TaskItem
-        {
-            Title = request.Title,
-            Description = request.Description,
-            CategoryId = request.CategoryId,
-            Priority = request.Priority,
-            StartDate = request.StartDate,
-            DueDate = request.DueDate
-        };
-
-        var result = await _taskService.CreateTeamTaskAsync(
-            task,
-            id,
-            request.BoardColumnId,
-            request.AssignedToUserId,
-            userId);
-
-        return result.ToActionResult(createdTask => Ok(createdTask));
     }
 
     [HttpGet("{id:int}/activity")]

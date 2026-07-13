@@ -2,7 +2,7 @@ import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormArray, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, from, of, switchMap, toArray } from 'rxjs';
@@ -19,6 +19,7 @@ import {
   AssignmentStatus,
   BoardColumn,
   BoardColumnWithTasks,
+  BoardListItem,
   CommentAttachment,
   CreateCommentRequest,
   Priority,
@@ -62,11 +63,19 @@ export class TeamBoard implements OnInit {
   private readonly sanitizer = inject(DomSanitizer);
 
   readonly teamId = signal<number | null>(null);
+  readonly boardId = signal<number | null>(null);
+  readonly boards = signal<BoardListItem[]>([]);
   readonly board = signal<TeamBoardModel | null>(null);
   readonly team = signal<TeamDetail | null>(null);
   readonly categories = signal<Category[]>([]);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
+
+  readonly showBoardMenu = signal(false);
+  readonly showBoardModal = signal(false);
+  readonly savingBoard = signal(false);
+  readonly boardError = signal<string | null>(null);
+  readonly deletingBoard = signal(false);
 
   readonly showColumnModal = signal(false);
   readonly savingColumn = signal(false);
@@ -238,9 +247,40 @@ export class TeamBoard implements OnInit {
     { value: Priority.Critical, label: 'Kritik' }
   ];
 
+  private readonly defaultBoardColumns = ['All Tasks', 'In Progress', 'Completed'];
+
   readonly columnForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.maxLength(100)]]
   });
+
+  readonly boardForm = this.fb.nonNullable.group({
+    name: ['', [Validators.required, Validators.maxLength(200)]],
+    columns: this.fb.array(this.defaultBoardColumns.map((title) => this.buildBoardColumnControl(title)))
+  });
+
+  get boardColumns(): FormArray<FormControl<string>> {
+    return this.boardForm.controls.columns;
+  }
+
+  private buildBoardColumnControl(value = ''): FormControl<string> {
+    return this.fb.nonNullable.control(value, [Validators.maxLength(100)]);
+  }
+
+  private resetBoardColumns(): void {
+    this.boardColumns.clear();
+    this.defaultBoardColumns.forEach((title) => this.boardColumns.push(this.buildBoardColumnControl(title)));
+  }
+
+  addBoardColumnField(): void {
+    this.boardColumns.push(this.buildBoardColumnControl());
+  }
+
+  removeBoardColumnField(index: number): void {
+    if (this.boardColumns.length <= 1) {
+      return;
+    }
+    this.boardColumns.removeAt(index);
+  }
 
   readonly editColumnForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.maxLength(100)]]
@@ -279,6 +319,7 @@ export class TeamBoard implements OnInit {
       const id = Number(params.get('id'));
       if (Number.isNaN(id)) {
         this.teamId.set(null);
+        this.boardId.set(null);
         this.error.set('Geçersiz takım.');
         this.loading.set(false);
         return;
@@ -286,6 +327,22 @@ export class TeamBoard implements OnInit {
 
       this.resetModals();
       this.teamId.set(id);
+
+      const boardIdParam = params.get('boardId');
+      if (!boardIdParam) {
+        this.redirectToDefaultBoard(id);
+        return;
+      }
+
+      const boardId = Number(boardIdParam);
+      if (Number.isNaN(boardId)) {
+        this.boardId.set(null);
+        this.error.set('Geçersiz pano.');
+        this.loading.set(false);
+        return;
+      }
+
+      this.boardId.set(boardId);
       this.load();
       void this.connectBoardHub(id);
     });
@@ -301,6 +358,13 @@ export class TeamBoard implements OnInit {
     this.boardHub.boardChanged$
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((event) => {
+        if (event.boardId != null && this.boardId() != null && event.boardId !== this.boardId()) {
+          if (event.changeType === 'board-created' || event.changeType === 'board-deleted') {
+            this.refreshBoardsList();
+          }
+          return;
+        }
+
         const openDetailId = this.detail()?.id;
         const affectsOpenDetail =
           openDetailId !== undefined &&
@@ -318,6 +382,10 @@ export class TeamBoard implements OnInit {
           this.loadTaskActivity(openDetailId);
           this.loadTaskAttachments(openDetailId);
           this.loadTaskComments(openDetailId);
+        }
+
+        if (event.changeType === 'board-created' || event.changeType === 'board-deleted') {
+          this.refreshBoardsList();
         }
       });
 
@@ -414,6 +482,10 @@ export class TeamBoard implements OnInit {
     if (this.showColumnMenu()) {
       this.closeColumnMenu();
     }
+
+    if (this.showBoardMenu()) {
+      this.showBoardMenu.set(false);
+    }
   }
 
   private async connectBoardHub(teamId: number): Promise<void> {
@@ -425,6 +497,8 @@ export class TeamBoard implements OnInit {
   }
 
   private resetModals(): void {
+    this.showBoardMenu.set(false);
+    this.showBoardModal.set(false);
     this.showColumnModal.set(false);
     this.showTaskModal.set(false);
     this.showMembersModal.set(false);
@@ -555,14 +629,15 @@ export class TeamBoard implements OnInit {
 
   load(): void {
     const id = this.teamId();
-    if (id === null) {
+    const boardId = this.boardId();
+    if (id === null || boardId === null) {
       return;
     }
 
     this.loading.set(true);
     this.error.set(null);
 
-    this.teamService.getBoard(id).subscribe({
+    this.teamService.getBoard(id, boardId).subscribe({
       next: (board) => {
         this.board.set(board);
         this.loading.set(false);
@@ -581,6 +656,7 @@ export class TeamBoard implements OnInit {
     this.teamService.getTeam(id).subscribe({
       next: (team) => {
         this.team.set(team);
+        this.boards.set(team.boards ?? []);
         this.photoCache.ensureMany(
           team.members.map((member) => ({
             userId: member.userId,
@@ -589,6 +665,136 @@ export class TeamBoard implements OnInit {
         );
       },
       error: () => this.team.set(null)
+    });
+  }
+
+  private redirectToDefaultBoard(teamId: number): void {
+    this.loading.set(true);
+    this.teamService.getBoards(teamId).subscribe({
+      next: (boards) => {
+        const first = boards[0];
+        if (!first) {
+          this.loading.set(false);
+          this.error.set('Bu takımda pano bulunamadı.');
+          return;
+        }
+
+        void this.router.navigate(['/teams', teamId, 'boards', first.id], {
+          replaceUrl: true,
+          queryParamsHandling: 'preserve'
+        });
+      },
+      error: (err: HttpErrorResponse) => {
+        this.loading.set(false);
+        this.error.set(err.error?.message ?? 'Panolar yüklenemedi.');
+      }
+    });
+  }
+
+  private refreshBoardsList(): void {
+    const id = this.teamId();
+    if (id === null) {
+      return;
+    }
+
+    this.teamService.getBoards(id).subscribe({
+      next: (boards) => this.boards.set(boards),
+      error: () => {}
+    });
+  }
+
+  toggleBoardMenu(): void {
+    this.showBoardMenu.update((open) => !open);
+  }
+
+  selectBoard(board: BoardListItem): void {
+    const teamId = this.teamId();
+    if (teamId === null || board.id === this.boardId()) {
+      this.showBoardMenu.set(false);
+      return;
+    }
+
+    this.showBoardMenu.set(false);
+    void this.router.navigate(['/teams', teamId, 'boards', board.id]);
+  }
+
+  openBoardModal(): void {
+    this.boardForm.controls.name.reset('');
+    this.resetBoardColumns();
+    this.boardError.set(null);
+    this.showBoardMenu.set(false);
+    this.showBoardModal.set(true);
+  }
+
+  closeBoardModal(): void {
+    if (this.savingBoard()) {
+      return;
+    }
+    this.showBoardModal.set(false);
+  }
+
+  submitBoard(): void {
+    const teamId = this.teamId();
+    if (teamId === null || this.boardForm.invalid) {
+      this.boardForm.markAllAsTouched();
+      return;
+    }
+
+    this.savingBoard.set(true);
+    this.boardError.set(null);
+    const { name, columns } = this.boardForm.getRawValue();
+    const columnTitles = columns.map((title) => title.trim()).filter((title) => title.length > 0);
+
+    this.teamService
+      .createBoard(teamId, {
+        name: name.trim(),
+        columnTitles: columnTitles.length > 0 ? columnTitles : undefined
+      })
+      .subscribe({
+        next: (board) => {
+          this.savingBoard.set(false);
+          this.showBoardModal.set(false);
+          void this.router.navigate(['/teams', teamId, 'boards', board.id]);
+        },
+        error: (err: HttpErrorResponse) => {
+          this.savingBoard.set(false);
+          this.boardError.set(err.error?.message ?? 'Pano oluşturulamadı.');
+        }
+      });
+  }
+
+  deleteCurrentBoard(): void {
+    const teamId = this.teamId();
+    const boardId = this.boardId();
+    if (teamId === null || boardId === null || !this.isLeader() || this.deletingBoard()) {
+      return;
+    }
+
+    if (this.boards().length <= 1) {
+      alert('Takımdaki son pano silinemez.');
+      return;
+    }
+
+    if (!confirm('Bu panoyu ve içindeki tüm sütun/görevleri silmek istiyor musunuz?')) {
+      return;
+    }
+
+    this.deletingBoard.set(true);
+    this.teamService.deleteBoard(teamId, boardId).subscribe({
+      next: () => {
+        this.deletingBoard.set(false);
+        const remaining = this.boards().filter((board) => board.id !== boardId);
+        const next = remaining[0];
+        if (next) {
+          void this.router.navigate(['/teams', teamId, 'boards', next.id]);
+        } else {
+          void this.router.navigate(['/teams']);
+        }
+      },
+      error: (err: HttpErrorResponse) => {
+        this.deletingBoard.set(false);
+        alert(err.error?.message ?? 'Pano silinemedi.');
+      }
     });
   }
 
@@ -1350,7 +1556,8 @@ export class TeamBoard implements OnInit {
 
   submitColumn(): void {
     const id = this.teamId();
-    if (id === null || this.columnForm.invalid) {
+    const boardId = this.boardId();
+    if (id === null || boardId === null || this.columnForm.invalid) {
       this.columnForm.markAllAsTouched();
       return;
     }
@@ -1359,7 +1566,7 @@ export class TeamBoard implements OnInit {
     this.columnError.set(null);
 
     const { title } = this.columnForm.getRawValue();
-    this.teamService.addColumn(id, { title: title.trim() }).subscribe({
+    this.teamService.addColumn(id, boardId, { title: title.trim() }).subscribe({
       next: () => {
         this.savingColumn.set(false);
         this.showColumnModal.set(false);
@@ -1388,7 +1595,8 @@ export class TeamBoard implements OnInit {
 
   saveColumnEdit(column: BoardColumnWithTasks): void {
     const id = this.teamId();
-    if (id === null || this.editColumnForm.invalid) {
+    const boardId = this.boardId();
+    if (id === null || boardId === null || this.editColumnForm.invalid) {
       this.editColumnForm.markAllAsTouched();
       return;
     }
@@ -1403,7 +1611,7 @@ export class TeamBoard implements OnInit {
     this.savingColumnEdit.set(true);
     this.editColumnError.set(null);
 
-    this.teamService.updateColumn(id, column.id, { title: trimmed }).subscribe({
+    this.teamService.updateColumn(id, boardId, column.id, { title: trimmed }).subscribe({
       next: () => {
         this.savingColumnEdit.set(false);
         this.editingColumnId.set(null);
@@ -1492,8 +1700,9 @@ export class TeamBoard implements OnInit {
 
   submitTask(): void {
     const id = this.teamId();
+    const boardId = this.boardId();
     const columnId = this.targetColumnId();
-    if (id === null || columnId === null || this.taskForm.invalid) {
+    if (id === null || boardId === null || columnId === null || this.taskForm.invalid) {
       this.taskForm.markAllAsTouched();
       return;
     }
@@ -1503,7 +1712,7 @@ export class TeamBoard implements OnInit {
 
     const raw = this.taskForm.getRawValue();
     this.teamService
-      .createTask(id, {
+      .createTask(id, boardId, {
         title: raw.title.trim(),
         description: raw.description.trim() || null,
         categoryId: raw.categoryId ? Number(raw.categoryId) : null,
@@ -1977,11 +2186,12 @@ export class TeamBoard implements OnInit {
       }
 
       const id = this.teamId();
-      if (id === null) {
+      const boardId = this.boardId();
+      if (id === null || boardId === null) {
         return;
       }
 
-      this.teamService.reorderColumns(id, { columnIds: orderedColumnIds }).subscribe({
+      this.teamService.reorderColumns(id, boardId, { columnIds: orderedColumnIds }).subscribe({
         next: () => this.load(),
         error: () => this.load()
       });

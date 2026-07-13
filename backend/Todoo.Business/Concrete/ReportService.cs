@@ -33,8 +33,12 @@ public class ReportService : IReportService
         var teamTasks = (await _unitOfWork.TaskItems.GetAllAsync())
             .Where(task => task.TeamId == teamId)
             .ToList();
+        var boardIds = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(board => board.TeamId == teamId)
+            .Select(board => board.Id)
+            .ToHashSet();
         var columnMap = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
+            .Where(column => boardIds.Contains(column.BoardId))
             .ToDictionary(column => column.Id, column => column.Title);
 
         var mostUsedCategoryId = teamTasks

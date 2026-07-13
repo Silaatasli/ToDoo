@@ -10,6 +10,7 @@ public interface IUnitOfWork
     IRepository<Category> Categories { get; }
     IRepository<Team> Teams { get; }
     IRepository<TeamMember> TeamMembers { get; }
+    IRepository<Board> Boards { get; }
     IRepository<TeamBoardColumn> TeamBoardColumns { get; }
     IRepository<TaskActivityLog> TaskActivityLogs { get; }
     IRepository<TaskAttachment> TaskAttachments { get; }

@@ -10,6 +10,7 @@ namespace Todoo.Business.Concrete;
 
 public class TeamService : ITeamService
 {
+    private const string DefaultBoardName = "Ana pano";
     private static readonly string[] DefaultColumnTitles = ["All Tasks", "In Progress", "Completed"];
 
     private readonly IUnitOfWork _unitOfWork;
@@ -23,13 +24,21 @@ public class TeamService : ITeamService
         _searchIndex = searchIndex;
     }
 
-    public async Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(string name, IReadOnlyList<string>? columnTitles, int userId)
+    public async Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(
+        string name,
+        string? boardName,
+        IReadOnlyList<string>? columnTitles,
+        int userId)
     {
         var trimmedName = name.Trim();
         if (string.IsNullOrWhiteSpace(trimmedName))
         {
             return ServiceResult<TeamDetailDto>.Fail("Takim adi bos olamaz.");
         }
+
+        var resolvedBoardName = string.IsNullOrWhiteSpace(boardName)
+            ? DefaultBoardName
+            : boardName.Trim();
 
         var titles = ResolveColumnTitles(columnTitles);
         var team = new Team
@@ -49,6 +58,15 @@ public class TeamService : ITeamService
             UserId = userId
         });
 
+        var board = new Board
+        {
+            TeamId = team.Id,
+            Name = resolvedBoardName,
+            DisplayOrder = 0
+        };
+        _unitOfWork.Boards.Add(board);
+        await _unitOfWork.SaveChangesAsync();
+
         for (var i = 0; i < titles.Count; i++)
         {
             var isCompletedColumn = titles[i].Contains("complet", StringComparison.OrdinalIgnoreCase)
@@ -57,7 +75,7 @@ public class TeamService : ITeamService
 
             _unitOfWork.TeamBoardColumns.Add(new TeamBoardColumn
             {
-                TeamId = team.Id,
+                BoardId = board.Id,
                 Title = titles[i],
                 DisplayOrder = i,
                 IsCompletedColumn = isCompletedColumn
@@ -66,25 +84,26 @@ public class TeamService : ITeamService
 
         await _unitOfWork.SaveChangesAsync();
         _searchIndex.IndexTeam(team);
+        _searchIndex.IndexBoard(board, team.Name);
         await IndexPersonDocumentAsync(userId);
         return await GetTeamByIdAsync(team.Id, userId);
     }
 
     public async Task<IEnumerable<TeamListDto>> GetTeamsForUserAsync(int userId)
     {
-        var memberTeamIds = (await _unitOfWork.TeamMembers.GetAllAsync()) // user için tüm membershipleri al
-            .Where(member => member.UserId == userId) // userId ile eşleşenleri filtrele
-            .Select(member => member.TeamId) // sadece teamId'leri al
-            .ToHashSet(); // hızlı arama için hashset
+        var memberTeamIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.UserId == userId)
+            .Select(member => member.TeamId)
+            .ToHashSet();
 
         var teams = (await _unitOfWork.Teams.GetAllAsync())
-            .Where(team => memberTeamIds.Contains(team.Id) && !team.IsPersonal) // user'ın üyesi olduğu ve kişisel olmayan takımları filtrele
-            .OrderByDescending(team => team.CreatedDate); // en son oluşturulan takımlar önce gelsin
+            .Where(team => memberTeamIds.Contains(team.Id) && !team.IsPersonal)
+            .OrderByDescending(team => team.CreatedDate);
 
-        var users = (await _unitOfWork.Users.GetAllAsync()).ToDictionary(user => user.Id, user => user.Email); // userId -> email map'i oluştur
-        var memberCounts = (await _unitOfWork.TeamMembers.GetAllAsync()) // tüm team üyelerini al
-            .GroupBy(member => member.TeamId) // teamId'ye göre grupla
-            .ToDictionary(group => group.Key, group => group.Count()); //üye sayılarını tut
+        var users = (await _unitOfWork.Users.GetAllAsync()).ToDictionary(user => user.Id, user => user.Email);
+        var memberCounts = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .GroupBy(member => member.TeamId)
+            .ToDictionary(group => group.Key, group => group.Count());
 
         return teams.Select(team => new TeamListDto
         {
@@ -130,16 +149,11 @@ public class TeamService : ITeamService
             })
             .ToList();
 
-        var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
-            .OrderBy(column => column.DisplayOrder)
-            .Select(column => new TeamBoardColumnDto
-            {
-                Id = column.Id,
-                Title = column.Title,
-                DisplayOrder = column.DisplayOrder,
-                IsCompletedColumn = column.IsCompletedColumn
-            })
+        var boards = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(board => board.TeamId == teamId)
+            .OrderBy(board => board.DisplayOrder)
+            .ThenBy(board => board.Id)
+            .Select(MapBoardListDto)
             .ToList();
 
         return ServiceResult<TeamDetailDto>.Ok(new TeamDetailDto
@@ -150,8 +164,172 @@ public class TeamService : ITeamService
             LeaderEmail = users.GetValueOrDefault(team.LeaderUserId)?.Email ?? string.Empty,
             CreatedDate = team.CreatedDate,
             Members = members,
-            BoardColumns = columns
+            Boards = boards,
+            BoardColumns = []
         });
+    }
+
+    public async Task<ServiceResult<IEnumerable<BoardListDto>>> GetBoardsAsync(int teamId, int userId)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        if (team is null)
+        {
+            return ServiceResult<IEnumerable<BoardListDto>>.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (!await IsTeamMemberAsync(teamId, userId))
+        {
+            return ServiceResult<IEnumerable<BoardListDto>>.Fail("Bu takimin uyesi degilsiniz.", ServiceErrorKind.Forbidden);
+        }
+
+        var boards = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(board => board.TeamId == teamId)
+            .OrderBy(board => board.DisplayOrder)
+            .ThenBy(board => board.Id)
+            .Select(MapBoardListDto);
+
+        return ServiceResult<IEnumerable<BoardListDto>>.Ok(boards);
+    }
+
+    public async Task<ServiceResult<BoardListDto>> CreateBoardAsync(
+        int teamId,
+        string name,
+        IReadOnlyList<string>? columnTitles,
+        int userId)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        if (team is null)
+        {
+            return ServiceResult<BoardListDto>.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (team.LeaderUserId != userId)
+        {
+            return ServiceResult<BoardListDto>.Fail("Sadece takim lideri pano olusturabilir.", ServiceErrorKind.Forbidden);
+        }
+
+        var trimmedName = name.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedName))
+        {
+            return ServiceResult<BoardListDto>.Fail("Pano adi bos olamaz.");
+        }
+
+        var existingBoards = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(board => board.TeamId == teamId)
+            .ToList();
+        var nextOrder = existingBoards.Count == 0 ? 0 : existingBoards.Max(board => board.DisplayOrder) + 1;
+
+        var board = new Board
+        {
+            TeamId = teamId,
+            Name = trimmedName,
+            DisplayOrder = nextOrder
+        };
+
+        _unitOfWork.Boards.Add(board);
+        await _unitOfWork.SaveChangesAsync();
+
+        var titles = ResolveColumnTitles(columnTitles);
+        for (var i = 0; i < titles.Count; i++)
+        {
+            var isCompletedColumn = titles[i].Contains("complet", StringComparison.OrdinalIgnoreCase)
+                || titles[i].Contains("tamam", StringComparison.OrdinalIgnoreCase)
+                || (!HasCustomTitles(columnTitles) && titles.Count == 3 && i == 2);
+
+            _unitOfWork.TeamBoardColumns.Add(new TeamBoardColumn
+            {
+                BoardId = board.Id,
+                Title = titles[i],
+                DisplayOrder = i,
+                IsCompletedColumn = isCompletedColumn
+            });
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        _searchIndex.IndexBoard(board, team.Name);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.BoardCreated, userId, boardId: board.Id);
+
+        return ServiceResult<BoardListDto>.Ok(MapBoardListDto(board));
+    }
+
+    public async Task<ServiceResult> DeleteBoardAsync(int teamId, int boardId, int userId)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        if (team is null)
+        {
+            return ServiceResult.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (team.LeaderUserId != userId)
+        {
+            return ServiceResult.Fail("Sadece takim lideri pano silebilir.", ServiceErrorKind.Forbidden);
+        }
+
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null || board.TeamId != teamId)
+        {
+            return ServiceResult.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        var boardCount = (await _unitOfWork.Boards.GetAllAsync()).Count(b => b.TeamId == teamId);
+        if (boardCount <= 1)
+        {
+            return ServiceResult.Fail("Takimin son panosu silinemez.");
+        }
+
+        var tasks = (await _unitOfWork.TaskItems.GetAllAsync())
+            .Where(task => task.BoardId == boardId)
+            .ToList();
+        var taskIds = tasks.Select(task => task.Id).ToHashSet();
+
+        var activityLogs = (await _unitOfWork.TaskActivityLogs.GetAllAsync())
+            .Where(log => log.TaskId.HasValue && taskIds.Contains(log.TaskId.Value))
+            .ToList();
+        foreach (var log in activityLogs)
+        {
+            log.TaskId = null;
+            _unitOfWork.TaskActivityLogs.Update(log);
+        }
+
+        foreach (var task in tasks)
+        {
+            _searchIndex.RemoveTask(task.Id);
+            await _unitOfWork.TaskItems.DeleteAsync(task.Id);
+        }
+
+        var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
+            .Where(column => column.BoardId == boardId)
+            .ToList();
+
+        foreach (var column in columns)
+        {
+            await _unitOfWork.TeamBoardColumns.DeleteAsync(column.Id);
+        }
+
+        await _unitOfWork.Boards.DeleteAsync(boardId);
+        await _unitOfWork.SaveChangesAsync();
+        _searchIndex.RemoveBoard(boardId);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.BoardDeleted, userId, boardId: boardId);
+        return ServiceResult.Ok();
+    }
+
+    public async Task<ServiceResult<TeamBoardDto>> GetBoardAsync(int teamId, int boardId, int userId)
+    {
+        var teamResult = await GetTeamByIdAsync(teamId, userId);
+        if (!teamResult.Success)
+        {
+            return ServiceResult<TeamBoardDto>.Fail(
+                teamResult.ErrorMessage!,
+                teamResult.ErrorKind ?? ServiceErrorKind.Validation);
+        }
+
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null || board.TeamId != teamId)
+        {
+            return ServiceResult<TeamBoardDto>.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        return await BuildBoardDtoAsync(teamResult.Data!, board);
     }
 
     public async Task<ServiceResult<TeamBoardDto>> GetTeamBoardAsync(int teamId, int userId)
@@ -164,74 +342,28 @@ public class TeamService : ITeamService
                 teamResult.ErrorKind ?? ServiceErrorKind.Validation);
         }
 
-        var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
-            .OrderBy(column => column.DisplayOrder)
-            .ToList();
+        var board = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(b => b.TeamId == teamId)
+            .OrderBy(b => b.DisplayOrder)
+            .ThenBy(b => b.Id)
+            .FirstOrDefault();
 
-        var tasks = (await _unitOfWork.TaskItems.GetAllAsync())
-            .Where(task => task.TeamId == teamId)
-            .ToList();
-
-        var categoryMap = (await _unitOfWork.Categories.GetAllAsync())
-            .ToDictionary(category => category.Id, category => category.Name);
-        var userMap = (await _unitOfWork.Users.GetAllAsync())
-            .ToDictionary(user => user.Id, user => user.Email);
-        var columnMap = columns.ToDictionary(column => column.Id, column => column.Title);
-
-        var teamEntity = await _unitOfWork.Teams.GetByIdAsync(teamId);
-
-        var taskDtos = tasks.Select(task => new TaskListDto
+        if (board is null)
         {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            CategoryId = task.CategoryId,
-            CategoryName = task.CategoryId.HasValue && categoryMap.TryGetValue(task.CategoryId.Value, out var categoryName)
-                ? categoryName
-                : null,
-            Priority = task.Priority,
-            StartDate = task.StartDate,
-            DueDate = task.DueDate,
-            IsCompleted = task.IsCompleted,
-            TeamId = task.TeamId,
-            BoardColumnId = task.BoardColumnId,
-            BoardColumnTitle = columnMap.GetValueOrDefault(task.BoardColumnId),
-            AssignedToUserId = task.AssignedToUserId,
-            AssignedToEmail = task.AssignedToUserId.HasValue
-                ? userMap.GetValueOrDefault(task.AssignedToUserId.Value)
-                : null,
-            AssignmentStatus = task.AssignmentStatus,
-            TeamName = teamResult.Data!.Name,
-            IsPersonalTeam = teamEntity?.IsPersonal ?? false
-        }).ToList();
-
-        return ServiceResult<TeamBoardDto>.Ok(new TeamBoardDto
-        {
-            TeamId = teamId,
-            TeamName = teamResult.Data!.Name,
-            Columns = columns.Select(column => new TeamBoardColumnWithTasksDto
-            {
-                Id = column.Id,
-                Title = column.Title,
-                DisplayOrder = column.DisplayOrder,
-                IsCompletedColumn = column.IsCompletedColumn,
-                Tasks = taskDtos.Where(task => task.BoardColumnId == column.Id).ToList()
-            }).ToList()
-        });
-    }
-
-    public async Task<ServiceResult<TeamBoardColumnDto>> AddBoardColumnAsync(int teamId, string title, int userId)
-    {
-        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
-        if (team is null)
-        {
-            return ServiceResult<TeamBoardColumnDto>.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
+            return ServiceResult<TeamBoardDto>.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
         }
 
-        if (!await IsTeamMemberAsync(teamId, userId))
+        return await BuildBoardDtoAsync(teamResult.Data!, board);
+    }
+
+    public async Task<ServiceResult<TeamBoardColumnDto>> AddBoardColumnAsync(int teamId, int boardId, string title, int userId)
+    {
+        var accessResult = await EnsureBoardAccessAsync(teamId, boardId, userId);
+        if (!accessResult.Success)
         {
-            return ServiceResult<TeamBoardColumnDto>.Fail("Bu takimin uyesi degilsiniz.", ServiceErrorKind.Forbidden);
+            return ServiceResult<TeamBoardColumnDto>.Fail(
+                accessResult.ErrorMessage!,
+                accessResult.ErrorKind ?? ServiceErrorKind.Validation);
         }
 
         var trimmedTitle = title.Trim();
@@ -241,13 +373,13 @@ public class TeamService : ITeamService
         }
 
         var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
+            .Where(column => column.BoardId == boardId)
             .ToList();
 
         var nextOrder = columns.Count == 0 ? 0 : columns.Max(column => column.DisplayOrder) + 1;
         var column = new TeamBoardColumn
         {
-            TeamId = teamId,
+            BoardId = boardId,
             Title = trimmedTitle,
             DisplayOrder = nextOrder,
             IsCompletedColumn = trimmedTitle.Contains("complet", StringComparison.OrdinalIgnoreCase)
@@ -256,7 +388,7 @@ public class TeamService : ITeamService
 
         _unitOfWork.TeamBoardColumns.Add(column);
         await _unitOfWork.SaveChangesAsync();
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnAdded, userId);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnAdded, userId, boardId: boardId);
 
         return ServiceResult<TeamBoardColumnDto>.Ok(new TeamBoardColumnDto
         {
@@ -267,17 +399,14 @@ public class TeamService : ITeamService
         });
     }
 
-    public async Task<ServiceResult<TeamBoardColumnDto>> UpdateBoardColumnAsync(int teamId, int columnId, string title, int userId)
+    public async Task<ServiceResult<TeamBoardColumnDto>> UpdateBoardColumnAsync(int teamId, int boardId, int columnId, string title, int userId)
     {
-        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
-        if (team is null)
+        var accessResult = await EnsureBoardAccessAsync(teamId, boardId, userId);
+        if (!accessResult.Success)
         {
-            return ServiceResult<TeamBoardColumnDto>.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
-        }
-
-        if (!await IsTeamMemberAsync(teamId, userId))
-        {
-            return ServiceResult<TeamBoardColumnDto>.Fail("Bu takimin uyesi degilsiniz.", ServiceErrorKind.Forbidden);
+            return ServiceResult<TeamBoardColumnDto>.Fail(
+                accessResult.ErrorMessage!,
+                accessResult.ErrorKind ?? ServiceErrorKind.Validation);
         }
 
         var trimmedTitle = title.Trim();
@@ -287,7 +416,7 @@ public class TeamService : ITeamService
         }
 
         var column = await _unitOfWork.TeamBoardColumns.GetByIdAsync(columnId);
-        if (column is null || column.TeamId != teamId)
+        if (column is null || column.BoardId != boardId)
         {
             return ServiceResult<TeamBoardColumnDto>.Fail("Sutun bulunamadi.", ServiceErrorKind.NotFound);
         }
@@ -299,7 +428,7 @@ public class TeamService : ITeamService
         _unitOfWork.TeamBoardColumns.Update(column);
         await _unitOfWork.SaveChangesAsync();
         await ReindexTasksInColumnAsync(column);
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnUpdated, userId);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnUpdated, userId, boardId: boardId);
 
         return ServiceResult<TeamBoardColumnDto>.Ok(new TeamBoardColumnDto
         {
@@ -310,7 +439,7 @@ public class TeamService : ITeamService
         });
     }
 
-    public async Task<ServiceResult> ReorderBoardColumnsAsync(int teamId, IReadOnlyList<int> orderedColumnIds, int userId)
+    public async Task<ServiceResult> ReorderBoardColumnsAsync(int teamId, int boardId, IReadOnlyList<int> orderedColumnIds, int userId)
     {
         var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
         if (team is null)
@@ -323,8 +452,14 @@ public class TeamService : ITeamService
             return ServiceResult.Fail("Sadece takim lideri sutun siralayabilir.", ServiceErrorKind.Forbidden);
         }
 
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null || board.TeamId != teamId)
+        {
+            return ServiceResult.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
         var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
-            .Where(column => column.TeamId == teamId)
+            .Where(column => column.BoardId == boardId)
             .OrderBy(column => column.DisplayOrder)
             .ToList();
 
@@ -351,7 +486,7 @@ public class TeamService : ITeamService
         }
 
         await _unitOfWork.SaveChangesAsync();
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnsReordered, userId);
+        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.ColumnsReordered, userId, boardId: boardId);
         return ServiceResult.Ok();
     }
 
@@ -378,6 +513,7 @@ public class TeamService : ITeamService
         await _unitOfWork.SaveChangesAsync();
 
         _searchIndex.RemoveTeam(teamId);
+        _searchIndex.RemoveBoardsForTeam(teamId);
         _searchIndex.RemoveTasksForTeam(teamId);
         foreach (var memberUserId in memberUserIds)
         {
@@ -532,9 +668,18 @@ public class TeamService : ITeamService
             UserId = userId
         });
 
-        _unitOfWork.TeamBoardColumns.Add(new TeamBoardColumn
+        var board = new Board
         {
             TeamId = team.Id,
+            Name = DefaultBoardName,
+            DisplayOrder = 0
+        };
+        _unitOfWork.Boards.Add(board);
+        await _unitOfWork.SaveChangesAsync();
+
+        _unitOfWork.TeamBoardColumns.Add(new TeamBoardColumn
+        {
+            BoardId = board.Id,
             Title = "Yapilacaklar",
             DisplayOrder = 0,
             IsCompletedColumn = false
@@ -542,7 +687,7 @@ public class TeamService : ITeamService
 
         _unitOfWork.TeamBoardColumns.Add(new TeamBoardColumn
         {
-            TeamId = team.Id,
+            BoardId = board.Id,
             Title = "Tamamlandi",
             DisplayOrder = 1,
             IsCompletedColumn = true
@@ -550,6 +695,103 @@ public class TeamService : ITeamService
 
         await _unitOfWork.SaveChangesAsync();
         return team.Id;
+    }
+
+    private async Task<ServiceResult<TeamBoardDto>> BuildBoardDtoAsync(TeamDetailDto team, Board board)
+    {
+        var columns = (await _unitOfWork.TeamBoardColumns.GetAllAsync())
+            .Where(column => column.BoardId == board.Id)
+            .OrderBy(column => column.DisplayOrder)
+            .ToList();
+
+        var tasks = (await _unitOfWork.TaskItems.GetAllAsync())
+            .Where(task => task.BoardId == board.Id)
+            .ToList();
+
+        var categoryMap = (await _unitOfWork.Categories.GetAllAsync())
+            .ToDictionary(category => category.Id, category => category.Name);
+        var userMap = (await _unitOfWork.Users.GetAllAsync())
+            .ToDictionary(user => user.Id, user => user.Email);
+        var columnMap = columns.ToDictionary(column => column.Id, column => column.Title);
+
+        var teamEntity = await _unitOfWork.Teams.GetByIdAsync(team.Id);
+
+        var taskDtos = tasks.Select(task => new TaskListDto
+        {
+            Id = task.Id,
+            Title = task.Title,
+            Description = task.Description,
+            CategoryId = task.CategoryId,
+            CategoryName = task.CategoryId.HasValue && categoryMap.TryGetValue(task.CategoryId.Value, out var categoryName)
+                ? categoryName
+                : null,
+            Priority = task.Priority,
+            StartDate = task.StartDate,
+            DueDate = task.DueDate,
+            IsCompleted = task.IsCompleted,
+            TeamId = task.TeamId,
+            BoardId = task.BoardId,
+            BoardName = board.Name,
+            BoardColumnId = task.BoardColumnId,
+            BoardColumnTitle = columnMap.GetValueOrDefault(task.BoardColumnId),
+            AssignedToUserId = task.AssignedToUserId,
+            AssignedToEmail = task.AssignedToUserId.HasValue
+                ? userMap.GetValueOrDefault(task.AssignedToUserId.Value)
+                : null,
+            AssignmentStatus = task.AssignmentStatus,
+            TeamName = team.Name,
+            IsPersonalTeam = teamEntity?.IsPersonal ?? false
+        }).ToList();
+
+        return ServiceResult<TeamBoardDto>.Ok(new TeamBoardDto
+        {
+            TeamId = team.Id,
+            TeamName = team.Name,
+            BoardId = board.Id,
+            BoardName = board.Name,
+            Columns = columns.Select(column => new TeamBoardColumnWithTasksDto
+            {
+                Id = column.Id,
+                Title = column.Title,
+                DisplayOrder = column.DisplayOrder,
+                IsCompletedColumn = column.IsCompletedColumn,
+                Tasks = taskDtos.Where(task => task.BoardColumnId == column.Id).ToList()
+            }).ToList()
+        });
+    }
+
+    private async Task<ServiceResult> EnsureBoardAccessAsync(int teamId, int boardId, int userId)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        if (team is null)
+        {
+            return ServiceResult.Fail("Takim bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (!await IsTeamMemberAsync(teamId, userId))
+        {
+            return ServiceResult.Fail("Bu takimin uyesi degilsiniz.", ServiceErrorKind.Forbidden);
+        }
+
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null || board.TeamId != teamId)
+        {
+            return ServiceResult.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        return ServiceResult.Ok();
+    }
+
+    private static BoardListDto MapBoardListDto(Board board)
+    {
+        return new BoardListDto
+        {
+            Id = board.Id,
+            TeamId = board.TeamId,
+            Name = board.Name,
+            DisplayOrder = board.DisplayOrder,
+            CreatedDate = board.CreatedDate
+        };
     }
 
     private static List<string> ResolveColumnTitles(IReadOnlyList<string>? columnTitles)
@@ -594,7 +836,13 @@ public class TeamService : ITeamService
 
     private async Task ReindexTasksInColumnAsync(TeamBoardColumn column)
     {
-        var team = await _unitOfWork.Teams.GetByIdAsync(column.TeamId);
+        var board = await _unitOfWork.Boards.GetByIdAsync(column.BoardId);
+        if (board is null)
+        {
+            return;
+        }
+
+        var team = await _unitOfWork.Teams.GetByIdAsync(board.TeamId);
         if (team is null || team.IsPersonal)
         {
             return;

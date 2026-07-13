@@ -304,6 +304,13 @@
     color: #006644;
   }
 
+  &.board {
+    border-radius: 6px;
+    background: #fff0b3;
+    color: #974f0c;
+    font-size: 0.85rem;
+  }
+
   &.team {
     background: #deebff;
     color: #0052cc;

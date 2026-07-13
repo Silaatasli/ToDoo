@@ -34,8 +34,17 @@ public sealed class LuceneSearchHostedService : IHostedService
             var nonPersonalTeamIds = nonPersonalTeams.Select(team => team.Id).ToHashSet();
             var teamNameById = nonPersonalTeams.ToDictionary(team => team.Id, team => team.Name);
 
+            var boards = (await unitOfWork.Boards.GetAllAsync())
+                .Where(board => nonPersonalTeamIds.Contains(board.TeamId))
+                .Select(board => (
+                    Board: board,
+                    TeamName: teamNameById.GetValueOrDefault(board.TeamId, string.Empty)))
+                .ToList();
+
+            var nonPersonalBoardIds = boards.Select(item => item.Board.Id).ToHashSet();
+
             var columns = (await unitOfWork.TeamBoardColumns.GetAllAsync())
-                .Where(column => nonPersonalTeamIds.Contains(column.TeamId))
+                .Where(column => nonPersonalBoardIds.Contains(column.BoardId))
                 .ToDictionary(column => column.Id, column => column.Title);
 
             var tasks = (await unitOfWork.TaskItems.GetAllAsync())
@@ -61,10 +70,11 @@ public sealed class LuceneSearchHostedService : IHostedService
                 .Select(user => (User: user, TeamIds: teamIdsByUserId[user.Id]))
                 .ToList();
 
-            await _searchIndex.RebuildAsync(nonPersonalTeams, tasks, people, cancellationToken);
+            await _searchIndex.RebuildAsync(nonPersonalTeams, boards, tasks, people, cancellationToken);
             _logger.LogInformation(
-                "Lucene arama indeksi yenilendi. Teams={TeamCount}, Tasks={TaskCount}, People={PeopleCount}",
+                "Lucene arama indeksi yenilendi. Teams={TeamCount}, Boards={BoardCount}, Tasks={TaskCount}, People={PeopleCount}",
                 nonPersonalTeams.Count,
+                boards.Count,
                 tasks.Count,
                 people.Count);
         }

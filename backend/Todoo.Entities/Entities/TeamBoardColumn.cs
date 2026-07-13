@@ -6,7 +6,7 @@ public class TeamBoardColumn
 {
     public int Id { get; set; }
 
-    public int TeamId { get; set; }
+    public int BoardId { get; set; }
 
     public string Title { get; set; } = string.Empty;
 
@@ -15,7 +15,7 @@ public class TeamBoardColumn
     public bool IsCompletedColumn { get; set; }
 
     [JsonIgnore]
-    public Team Team { get; set; } = null!;
+    public Board Board { get; set; } = null!;
 
     [JsonIgnore]
     public ICollection<TaskItem> Tasks { get; set; } = [];

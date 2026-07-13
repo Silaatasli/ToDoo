@@ -12,4 +12,6 @@ public static class TeamBoardChangeTypes
     public const string ColumnAdded = "column-added";
     public const string ColumnUpdated = "column-updated";
     public const string ColumnsReordered = "columns-reordered";
+    public const string BoardCreated = "board-created";
+    public const string BoardDeleted = "board-deleted";
 }

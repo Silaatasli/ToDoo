@@ -12,6 +12,7 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<Category>? _categories;
     private IRepository<Team>? _teams;
     private IRepository<TeamMember>? _teamMembers;
+    private IRepository<Board>? _boards;
     private IRepository<TeamBoardColumn>? _teamBoardColumns;
     private IRepository<TaskActivityLog>? _taskActivityLogs;
     private IRepository<TaskAttachment>? _taskAttachments;
@@ -28,6 +29,7 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<Category> Categories => _categories ??= new Repository<Category>(_context);
     public IRepository<Team> Teams => _teams ??= new Repository<Team>(_context);
     public IRepository<TeamMember> TeamMembers => _teamMembers ??= new Repository<TeamMember>(_context);
+    public IRepository<Board> Boards => _boards ??= new Repository<Board>(_context);
     public IRepository<TeamBoardColumn> TeamBoardColumns => _teamBoardColumns ??= new Repository<TeamBoardColumn>(_context);
     public IRepository<TaskActivityLog> TaskActivityLogs => _taskActivityLogs ??= new Repository<TaskActivityLog>(_context);
     public IRepository<TaskAttachment> TaskAttachments => _taskAttachments ??= new Repository<TaskAttachment>(_context);

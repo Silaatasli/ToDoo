@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 
 export interface BoardChangedEvent {
   teamId: number;
+  boardId?: number | null;
   changeType: string;
   actorUserId?: number | null;
   taskId?: number | null;

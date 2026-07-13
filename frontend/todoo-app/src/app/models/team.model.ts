@@ -24,6 +24,14 @@ export interface BoardColumn {
   isCompletedColumn: boolean;
 }
 
+export interface BoardListItem {
+  id: number;
+  teamId: number;
+  name: string;
+  displayOrder: number;
+  createdDate: string;
+}
+
 export interface TeamDetail {
   id: number;
   name: string;
@@ -31,6 +39,7 @@ export interface TeamDetail {
   leaderEmail: string;
   createdDate: string;
   members: TeamMember[];
+  boards: BoardListItem[];
   boardColumns: BoardColumn[];
 }
 
@@ -41,10 +50,18 @@ export interface BoardColumnWithTasks extends BoardColumn {
 export interface TeamBoard {
   teamId: number;
   teamName: string;
+  boardId: number;
+  boardName: string;
   columns: BoardColumnWithTasks[];
 }
 
 export interface CreateTeamRequest {
+  name: string;
+  boardName?: string;
+  columnTitles?: string[];
+}
+
+export interface CreateBoardRequest {
   name: string;
   columnTitles?: string[];
 }
@@ -91,6 +108,7 @@ export interface TaskDetail {
   teamId: number;
   teamName?: string | null;
   isPersonalTeam: boolean;
+  boardId: number;
   boardColumnId: number;
   boardColumnTitle: string;
   title: string;
@@ -131,6 +149,7 @@ export interface TaskListItem {
   teamId: number;
   teamName?: string | null;
   isPersonalTeam: boolean;
+  boardId: number;
   boardColumnId: number;
   boardColumnTitle?: string | null;
   assignedToUserId?: number | null;

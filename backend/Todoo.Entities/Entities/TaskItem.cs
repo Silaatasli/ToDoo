@@ -9,6 +9,8 @@ public class TaskItem
 
     public int TeamId { get; set; }
 
+    public int BoardId { get; set; }
+
     public int BoardColumnId { get; set; }
 
     public int CreatedByUserId { get; set; }
@@ -21,6 +23,9 @@ public class TaskItem
 
     [JsonIgnore]
     public Team Team { get; set; } = null!;
+
+    [JsonIgnore]
+    public Board Board { get; set; } = null!;
 
     [JsonIgnore]
     public TeamBoardColumn BoardColumn { get; set; } = null!;
