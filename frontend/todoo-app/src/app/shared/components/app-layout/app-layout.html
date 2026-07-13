@@ -58,7 +58,13 @@
     <header class="main-header">
       <div class="header-actions">
         <a class="user-chip" routerLink="/profile" title="Profilim">
-          <span class="user-chip-avatar">{{ teamInitial(displayName()) }}</span>
+          <span class="user-chip-avatar" [class.has-photo]="!!photoUrl()">
+            @if (photoUrl(); as url) {
+              <img [src]="url" [alt]="displayName()" />
+            } @else {
+              {{ teamInitial(displayName()) }}
+            }
+          </span>
           <span class="user-email">{{ displayName() }}</span>
         </a>
         <button type="button" class="logout-btn" (click)="logout()">Çıkış</button>

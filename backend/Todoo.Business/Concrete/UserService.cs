@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Todoo.Business.Abstract;
 using Todoo.Business.Helpers;
 using Todoo.Business.Models;
@@ -9,11 +10,23 @@ namespace Todoo.Business.Concrete;
 
 public class UserService : IUserService
 {
-    private readonly IUnitOfWork _unitOfWork;
+    private const long MaxPhotoSizeBytes = 5 * 1024 * 1024;
 
-    public UserService(IUnitOfWork unitOfWork)
+    private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif"
+    };
+
+    private readonly IUnitOfWork _unitOfWork;
+    private readonly IFileStorageService _fileStorage;
+
+    public UserService(IUnitOfWork unitOfWork, IFileStorageService fileStorage)
     {
         _unitOfWork = unitOfWork;
+        _fileStorage = fileStorage;
     }
 
     public async Task<ServiceResult<UserProfileDto>> GetOwnProfileAsync(int userId)
@@ -80,11 +93,143 @@ public class UserService : IUserService
                 Email = user.Email,
                 FirstName = user.FirstName,
                 LastName = user.LastName,
-                DisplayName = UserDisplayNameHelper.Format(user)
+                DisplayName = UserDisplayNameHelper.Format(user),
+                HasProfilePhoto = !string.IsNullOrWhiteSpace(user.ProfilePhotoObjectKey)
             })
             .ToList();
 
         return ServiceResult<IEnumerable<UserSearchResultDto>>.Ok(users);
+    }
+
+    public async Task<ServiceResult<UserProfileDto>> UploadProfilePhotoAsync(
+        int userId,
+        string fileName,
+        string contentType,
+        long sizeBytes,
+        Stream fileStream)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (user is null)
+        {
+            return ServiceResult<UserProfileDto>.Fail("Kullanici bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (sizeBytes <= 0)
+        {
+            return ServiceResult<UserProfileDto>.Fail("Bos dosya yuklenemez.");
+        }
+
+        if (sizeBytes > MaxPhotoSizeBytes)
+        {
+            return ServiceResult<UserProfileDto>.Fail("Profil fotografi en fazla 5 MB olabilir.");
+        }
+
+        var normalizedContentType = ResolveContentType(contentType, fileName);
+        if (!AllowedContentTypes.Contains(normalizedContentType))
+        {
+            return ServiceResult<UserProfileDto>.Fail("Desteklenmeyen dosya tipi. JPG, PNG, WEBP veya GIF yukleyin.");
+        }
+
+        var safeFileName = SanitizeFileName(fileName);
+        if (string.IsNullOrWhiteSpace(safeFileName))
+        {
+            return ServiceResult<UserProfileDto>.Fail("Gecersiz dosya adi.");
+        }
+
+        var objectKey = $"users/{user.Id}/avatar/{Guid.NewGuid():N}-{safeFileName}";
+        var previousKey = user.ProfilePhotoObjectKey;
+
+        try
+        {
+            await _fileStorage.UploadAsync(objectKey, fileStream, sizeBytes, normalizedContentType);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return ServiceResult<UserProfileDto>.Fail(ex.Message, ServiceErrorKind.Validation);
+        }
+
+        user.ProfilePhotoObjectKey = objectKey;
+        user.ProfilePhotoContentType = normalizedContentType;
+        user.ProfilePhotoFileName = safeFileName;
+        user.ProfilePhotoSizeBytes = sizeBytes;
+
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(previousKey) &&
+            !string.Equals(previousKey, objectKey, StringComparison.Ordinal))
+        {
+            try
+            {
+                await _fileStorage.DeleteAsync(previousKey);
+            }
+            catch
+            {
+                // Eski dosya silinemese de yeni foto kaydi gecerli kalsin.
+            }
+        }
+
+        return ServiceResult<UserProfileDto>.Ok(MapToDto(user, isSelf: true));
+    }
+
+    public async Task<ServiceResult<(Stream Stream, string ContentType, string FileName)>> DownloadProfilePhotoAsync(
+        int targetUserId,
+        int requesterUserId)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(targetUserId);
+        if (user is null)
+        {
+            return ServiceResult<(Stream, string, string)>.Fail("Kullanici bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (targetUserId != requesterUserId && !await SharesTeamAsync(targetUserId, requesterUserId))
+        {
+            return ServiceResult<(Stream, string, string)>.Fail(
+                "Bu kullanicinin profilini goruntuleme yetkiniz yok.",
+                ServiceErrorKind.Forbidden);
+        }
+
+        if (string.IsNullOrWhiteSpace(user.ProfilePhotoObjectKey))
+        {
+            return ServiceResult<(Stream, string, string)>.Fail("Profil fotografi bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        var stream = await _fileStorage.DownloadAsync(user.ProfilePhotoObjectKey);
+        var contentType = user.ProfilePhotoContentType ?? "application/octet-stream";
+        var fileName = user.ProfilePhotoFileName ?? "avatar";
+        return ServiceResult<(Stream, string, string)>.Ok((stream, contentType, fileName));
+    }
+
+    public async Task<ServiceResult<UserProfileDto>> DeleteProfilePhotoAsync(int userId)
+    {
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        if (user is null)
+        {
+            return ServiceResult<UserProfileDto>.Fail("Kullanici bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        var previousKey = user.ProfilePhotoObjectKey;
+        user.ProfilePhotoObjectKey = null;
+        user.ProfilePhotoContentType = null;
+        user.ProfilePhotoFileName = null;
+        user.ProfilePhotoSizeBytes = null;
+
+        _unitOfWork.Users.Update(user);
+        await _unitOfWork.SaveChangesAsync();
+
+        if (!string.IsNullOrWhiteSpace(previousKey))
+        {
+            try
+            {
+                await _fileStorage.DeleteAsync(previousKey);
+            }
+            catch
+            {
+                // DB kaydi temizlendigi icin MinIO silme hatasi engelleyici olmasin.
+            }
+        }
+
+        return ServiceResult<UserProfileDto>.Ok(MapToDto(user, isSelf: true));
     }
 
     private async Task<bool> SharesTeamAsync(int targetUserId, int requesterUserId)
@@ -125,6 +270,46 @@ public class UserService : IUserService
         PhoneNumber = user.PhoneNumber,
         Title = user.Title,
         CreatedDate = user.CreatedDate,
-        IsSelf = isSelf
+        IsSelf = isSelf,
+        HasProfilePhoto = !string.IsNullOrWhiteSpace(user.ProfilePhotoObjectKey)
     };
+
+    private static string ResolveContentType(string contentType, string fileName)
+    {
+        var normalized = string.IsNullOrWhiteSpace(contentType)
+            ? string.Empty
+            : contentType.Trim();
+
+        if (string.Equals(normalized, "image/jpg", StringComparison.OrdinalIgnoreCase))
+        {
+            normalized = "image/jpeg";
+        }
+
+        if (AllowedContentTypes.Contains(normalized))
+        {
+            return normalized;
+        }
+
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            ".gif" => "image/gif",
+            _ => normalized
+        };
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var trimmed = Path.GetFileName(fileName.Trim());
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return string.Empty;
+        }
+
+        trimmed = Regex.Replace(trimmed, @"[^\w\.\-]", "_");
+        return trimmed.Length > 180 ? trimmed[..180] : trimmed;
+    }
 }

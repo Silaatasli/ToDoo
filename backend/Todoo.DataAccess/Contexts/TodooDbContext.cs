@@ -49,6 +49,18 @@ public class TodooDbContext : DbContext
             .Property(user => user.PhoneNumber)
             .HasMaxLength(30);
 
+        modelBuilder.Entity<User>()
+            .Property(user => user.ProfilePhotoObjectKey)
+            .HasMaxLength(500);
+
+        modelBuilder.Entity<User>()
+            .Property(user => user.ProfilePhotoContentType)
+            .HasMaxLength(100);
+
+        modelBuilder.Entity<User>()
+            .Property(user => user.ProfilePhotoFileName)
+            .HasMaxLength(255);
+
         modelBuilder.Entity<Team>()
             .Property(team => team.Name)
             .HasMaxLength(200)

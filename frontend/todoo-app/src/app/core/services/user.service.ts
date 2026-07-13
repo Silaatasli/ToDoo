@@ -26,4 +26,26 @@ export class UserService {
       params: { q: query }
     });
   }
+
+  uploadMyPhoto(file: File): Observable<UserProfile> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return this.http.post<UserProfile>(`${this.baseUrl}/me/photo`, formData);
+  }
+
+  deleteMyPhoto(): Observable<UserProfile> {
+    return this.http.delete<UserProfile>(`${this.baseUrl}/me/photo`);
+  }
+
+  getPhoto(userId: number): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/${userId}/photo`, {
+      responseType: 'blob'
+    });
+  }
+
+  getMyPhoto(): Observable<Blob> {
+    return this.http.get(`${this.baseUrl}/me/photo`, {
+      responseType: 'blob'
+    });
+  }
 }

@@ -14,6 +14,7 @@ export interface TeamMember {
   lastName?: string | null;
   isLeader: boolean;
   joinedDate: string;
+  hasProfilePhoto: boolean;
 }
 
 export interface BoardColumn {

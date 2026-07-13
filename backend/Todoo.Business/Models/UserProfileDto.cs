@@ -17,4 +17,6 @@ public class UserProfileDto
     public DateTime CreatedDate { get; set; }
 
     public bool IsSelf { get; set; }
+
+    public bool HasProfilePhoto { get; set; }
 }

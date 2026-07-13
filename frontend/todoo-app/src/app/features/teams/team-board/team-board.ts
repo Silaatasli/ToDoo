@@ -8,6 +8,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, from, of, switchMap, toArray } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
+import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
 import { TaskService } from '../../../core/services/task.service';
 import { TeamService } from '../../../core/services/team.service';
@@ -54,6 +55,7 @@ export class TeamBoard implements OnInit {
   private readonly userService = inject(UserService);
   private readonly categoryService = inject(CategoryService);
   private readonly auth = inject(AuthService);
+  private readonly photoCache = inject(ProfilePhotoCacheService);
   private readonly boardHub = inject(TeamBoardHubService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
@@ -122,7 +124,7 @@ export class TeamBoard implements OnInit {
   readonly deletingCommentId = signal<number | null>(null);
   readonly deletingCommentAttachmentKey = signal<string | null>(null);
   readonly leftPaneTab = signal<'comments' | 'activity'>('comments');
-  readonly attachmentsExpanded = signal(false);
+  readonly attachmentsExpanded = signal(true);
   readonly descriptionExpanded = signal(true);
   readonly activityExpanded = signal(false);
   readonly detailsExpanded = signal(true);
@@ -375,7 +377,11 @@ export class TeamBoard implements OnInit {
       .subscribe((results) => {
         this.memberSearchLoading.set(false);
         const existingMemberIds = new Set((this.team()?.members ?? []).map((member) => member.userId));
-        this.memberSearchResults.set(results.filter((user) => !existingMemberIds.has(user.id)));
+        const filtered = results.filter((user) => !existingMemberIds.has(user.id));
+        this.memberSearchResults.set(filtered);
+        this.photoCache.ensureMany(
+          filtered.map((user) => ({ userId: user.id, hasProfilePhoto: user.hasProfilePhoto }))
+        );
       });
   }
 
@@ -422,7 +428,7 @@ export class TeamBoard implements OnInit {
     this.replyToCommentId.set(null);
     this.pendingCommentFiles.set([]);
     this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(false);
+    this.attachmentsExpanded.set(true);
     this.descriptionExpanded.set(true);
     this.activityExpanded.set(false);
     this.detailsExpanded.set(true);
@@ -563,7 +569,15 @@ export class TeamBoard implements OnInit {
     });
 
     this.teamService.getTeam(id).subscribe({
-      next: (team) => this.team.set(team),
+      next: (team) => {
+        this.team.set(team);
+        this.photoCache.ensureMany(
+          team.members.map((member) => ({
+            userId: member.userId,
+            hasProfilePhoto: member.hasProfilePhoto
+          }))
+        );
+      },
       error: () => this.team.set(null)
     });
   }
@@ -1545,7 +1559,7 @@ export class TeamBoard implements OnInit {
     this.replyToCommentId.set(null);
     this.pendingCommentFiles.set([]);
     this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(false);
+    this.attachmentsExpanded.set(true);
     this.descriptionExpanded.set(true);
     this.activityExpanded.set(false);
     this.detailsExpanded.set(true);
@@ -1583,7 +1597,7 @@ export class TeamBoard implements OnInit {
     this.replyToCommentId.set(null);
     this.pendingCommentFiles.set([]);
     this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(false);
+    this.attachmentsExpanded.set(true);
     this.descriptionExpanded.set(true);
     this.activityExpanded.set(false);
     this.detailsExpanded.set(true);
@@ -2125,7 +2139,15 @@ export class TeamBoard implements OnInit {
       return;
     }
     this.teamService.getTeam(id).subscribe({
-      next: (team) => this.team.set(team),
+      next: (team) => {
+        this.team.set(team);
+        this.photoCache.ensureMany(
+          team.members.map((member) => ({
+            userId: member.userId,
+            hasProfilePhoto: member.hasProfilePhoto
+          }))
+        );
+      },
       error: () => {}
     });
   }
@@ -2173,6 +2195,10 @@ export class TeamBoard implements OnInit {
 
   initial(value: string): string {
     return value.trim().charAt(0).toUpperCase() || '?';
+  }
+
+  memberPhotoUrl(userId: number | null | undefined): string | null {
+    return this.photoCache.photoUrl(userId);
   }
 
   memberName(member: TeamMember): string {

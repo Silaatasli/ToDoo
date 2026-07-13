@@ -117,6 +117,18 @@
   font-size: 0.68rem;
   font-weight: 700;
   flex-shrink: 0;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.has-photo {
+    background: #ebecf0;
+  }
 
   &.unassigned {
     background: #dfe1e6;
@@ -169,7 +181,19 @@
   border: 2px solid #fff;
   padding: 0;
   cursor: pointer;
+  overflow: hidden;
   transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.has-photo {
+    background: #ebecf0;
+  }
 
   &:first-child {
     margin-left: 0;
@@ -724,6 +748,18 @@
   font-size: 0.68rem;
   font-weight: 700;
   margin-left: auto;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.has-photo {
+    background: #ebecf0;
+  }
 }
 
 .add-task-btn {
@@ -955,6 +991,18 @@
   font-size: 0.78rem;
   font-weight: 700;
   flex-shrink: 0;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.has-photo {
+    background: #ebecf0;
+  }
 }
 
 .member-info {
@@ -2814,7 +2862,20 @@
   font-weight: 700;
   flex-shrink: 0;
   color: #fff;
+  overflow: hidden;
   box-shadow: inset 0 -1px 0 rgba(9, 30, 66, 0.12);
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+
+  &.has-photo {
+    background: #ebecf0 !important;
+    box-shadow: none;
+  }
 
   &.tone-a { background: linear-gradient(135deg, #4c6ef5, #364fc7); }
   &.tone-b { background: linear-gradient(135deg, #22b8cf, #0c8599); }

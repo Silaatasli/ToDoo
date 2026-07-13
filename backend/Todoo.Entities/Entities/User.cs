@@ -16,6 +16,14 @@ public class User
 
     public string? Title { get; set; }
 
+    public string? ProfilePhotoObjectKey { get; set; }
+
+    public string? ProfilePhotoContentType { get; set; }
+
+    public string? ProfilePhotoFileName { get; set; }
+
+    public long? ProfilePhotoSizeBytes { get; set; }
+
     public byte[] PasswordHash { get; set; } = [];
 
     public byte[] PasswordSalt { get; set; } = [];

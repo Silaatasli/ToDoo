@@ -110,14 +110,19 @@ public class TeamService : ITeamService
         var members = (await _unitOfWork.TeamMembers.GetAllAsync())
             .Where(member => member.TeamId == teamId)
             .OrderBy(member => member.JoinedDate)
-            .Select(member => new TeamMemberDto
+            .Select(member =>
             {
-                UserId = member.UserId,
-                Email = users.GetValueOrDefault(member.UserId)?.Email ?? string.Empty,
-                FirstName = users.GetValueOrDefault(member.UserId)?.FirstName,
-                LastName = users.GetValueOrDefault(member.UserId)?.LastName,
-                IsLeader = member.UserId == team.LeaderUserId,
-                JoinedDate = member.JoinedDate
+                var user = users.GetValueOrDefault(member.UserId);
+                return new TeamMemberDto
+                {
+                    UserId = member.UserId,
+                    Email = user?.Email ?? string.Empty,
+                    FirstName = user?.FirstName,
+                    LastName = user?.LastName,
+                    IsLeader = member.UserId == team.LeaderUserId,
+                    JoinedDate = member.JoinedDate,
+                    HasProfilePhoto = !string.IsNullOrWhiteSpace(user?.ProfilePhotoObjectKey)
+                };
             })
             .ToList();
 

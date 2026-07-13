@@ -11,4 +11,6 @@ public class UserSearchResultDto
     public string? LastName { get; set; }
 
     public string DisplayName { get; set; } = string.Empty;
+
+    public bool HasProfilePhoto { get; set; }
 }

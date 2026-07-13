@@ -7,6 +7,7 @@ export interface UserProfile {
   title?: string | null;
   createdDate: string;
   isSelf: boolean;
+  hasProfilePhoto: boolean;
 }
 
 export interface UpdateProfileRequest {
@@ -22,4 +23,5 @@ export interface UserSearchResult {
   firstName?: string | null;
   lastName?: string | null;
   displayName: string;
+  hasProfilePhoto: boolean;
 }

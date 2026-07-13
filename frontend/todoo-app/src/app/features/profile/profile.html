@@ -7,11 +7,45 @@
     } @else if (profile(); as p) {
       <section class="profile-card">
         <header class="profile-head">
-          <span class="profile-avatar">{{ initial(displayName()) }}</span>
+          <div class="profile-avatar-wrap">
+            <span class="profile-avatar" [class.has-photo]="!!photoUrl()">
+              @if (photoUrl(); as url) {
+                <img [src]="url" [alt]="displayName()" />
+              } @else {
+                {{ initial(displayName()) }}
+              }
+            </span>
+            @if (p.isSelf) {
+              <div class="profile-avatar-actions">
+                <label class="avatar-action-btn" [class.is-disabled]="uploadingPhoto() || showCropModal()">
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    (change)="onPhotoSelected($event)"
+                    [disabled]="uploadingPhoto() || removingPhoto() || showCropModal()"
+                  />
+                  {{ p.hasProfilePhoto ? 'Değiştir' : 'Fotoğraf ekle' }}
+                </label>
+                @if (p.hasProfilePhoto) {
+                  <button
+                    type="button"
+                    class="avatar-action-btn danger"
+                    (click)="removePhoto()"
+                    [disabled]="removingPhoto() || uploadingPhoto() || showCropModal()"
+                  >
+                    {{ removingPhoto() ? 'Kaldırılıyor...' : 'Kaldır' }}
+                  </button>
+                }
+              </div>
+            }
+          </div>
           <div class="profile-head-info">
             <h1>{{ displayName() }}</h1>
             @if (p.title) {
               <p class="profile-title">{{ p.title }}</p>
+            }
+            @if (photoError()) {
+              <p class="inline-error">{{ photoError() }}</p>
             }
           </div>
           @if (p.isSelf && !editing()) {
@@ -80,3 +114,61 @@
     }
   </main>
 </app-layout>
+
+@if (showCropModal()) {
+  <div class="crop-backdrop" (click)="closeCropModal()">
+    <section class="crop-modal" (click)="$event.stopPropagation()" role="dialog" aria-modal="true" aria-label="Profil fotoğrafını kırp">
+      <header class="crop-header">
+        <h2>Fotoğrafı düzenle</h2>
+        <button type="button" class="icon-btn" (click)="closeCropModal()" [disabled]="uploadingPhoto()" aria-label="Kapat">×</button>
+      </header>
+
+      <div class="crop-body">
+        <image-cropper
+          [imageChangedEvent]="imageChangedEvent()"
+          [maintainAspectRatio]="true"
+          [aspectRatio]="1"
+          [roundCropper]="true"
+          [resizeToWidth]="512"
+          [onlyScaleDown]="true"
+          [allowMoveImage]="true"
+          format="jpeg"
+          output="blob"
+          [imageQuality]="90"
+          [transform]="transform()"
+          (transformChange)="onTransformChange($event)"
+          (imageCropped)="onImageCropped($event)"
+          (cropperReady)="onCropperReady()"
+          (loadImageFailed)="onCropLoadFailed()"
+        ></image-cropper>
+      </div>
+
+      <div class="crop-zoom">
+        <span aria-hidden="true">−</span>
+        <input
+          type="range"
+          min="1"
+          max="3"
+          step="0.05"
+          [value]="zoomScale()"
+          (input)="onZoomChange($event)"
+          [disabled]="uploadingPhoto() || !cropReady()"
+          aria-label="Yakınlaştır"
+        />
+        <span aria-hidden="true">+</span>
+      </div>
+
+      <footer class="crop-footer">
+        <button type="button" class="secondary-btn" (click)="closeCropModal()" [disabled]="uploadingPhoto()">İptal</button>
+        <button
+          type="button"
+          class="primary-btn"
+          (click)="confirmCroppedPhoto()"
+          [disabled]="uploadingPhoto() || !croppedBlob()"
+        >
+          {{ uploadingPhoto() ? 'Yükleniyor...' : 'Kaydet' }}
+        </button>
+      </footer>
+    </section>
+  </div>
+}

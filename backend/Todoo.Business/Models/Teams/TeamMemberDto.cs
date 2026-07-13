@@ -13,4 +13,6 @@ public class TeamMemberDto
     public bool IsLeader { get; set; }
 
     public DateTime JoinedDate { get; set; }
+
+    public bool HasProfilePhoto { get; set; }
 }

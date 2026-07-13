@@ -42,6 +42,7 @@
                   class="chip-avatar"
                   [class.leader]="m.isLeader"
                   [class.selected]="isAssigneeFilterActive(m.userId)"
+                  [class.has-photo]="!!memberPhotoUrl(m.userId)"
                   [title]="
                     isAssigneeFilterActive(m.userId)
                       ? memberName(m) + ' filtresini kaldır'
@@ -50,7 +51,11 @@
                   [attr.aria-pressed]="isAssigneeFilterActive(m.userId)"
                   (click)="toggleAssigneeFilter(m.userId)"
                 >
-                  {{ initial(memberName(m)) }}
+                  @if (memberPhotoUrl(m.userId); as photoUrl) {
+                    <img [src]="photoUrl" [alt]="memberName(m)" />
+                  } @else {
+                    {{ initial(memberName(m)) }}
+                  }
                 </button>
               }
             </div>
@@ -81,7 +86,13 @@
                     [class.active]="isAssigneeFilterActive(m.userId)"
                     (click)="selectAssigneeFilter(m.userId)"
                   >
-                    <span class="menu-avatar">{{ initial(memberName(m)) }}</span>
+                    <span class="menu-avatar" [class.has-photo]="!!memberPhotoUrl(m.userId)">
+                      @if (memberPhotoUrl(m.userId); as photoUrl) {
+                        <img [src]="photoUrl" [alt]="memberName(m)" />
+                      } @else {
+                        {{ initial(memberName(m)) }}
+                      }
+                    </span>
                     <span class="menu-label">{{ memberName(m) }}</span>
                     @if (m.isLeader) {
                       <span class="menu-badge">Lider</span>
@@ -264,7 +275,15 @@
                       @if (task.dueDate) {
                         <span class="task-due">{{ task.dueDate | date: 'dd MMM' }}</span>
                       }
-                      @if (task.assignedToEmail) {
+                      @if (task.assignedToUserId; as assigneeId) {
+                        <span class="task-assignee" [class.has-photo]="!!memberPhotoUrl(assigneeId)" [title]="task.assignedToEmail || ''">
+                          @if (memberPhotoUrl(assigneeId); as photoUrl) {
+                            <img [src]="photoUrl" [alt]="task.assignedToEmail || 'Atanan'" />
+                          } @else {
+                            {{ initial(task.assignedToEmail || '?') }}
+                          }
+                        </span>
+                      } @else if (task.assignedToEmail) {
                         <span class="task-assignee" [title]="task.assignedToEmail">
                           {{ initial(task.assignedToEmail) }}
                         </span>
@@ -406,7 +425,13 @@
         @for (m of team()?.members ?? []; track m.userId) {
           <li class="member-row">
             <a class="member-main" [routerLink]="['/profile', m.userId]" title="Profili gör">
-              <span class="member-avatar">{{ initial(memberName(m)) }}</span>
+              <span class="member-avatar" [class.has-photo]="!!memberPhotoUrl(m.userId)">
+                @if (memberPhotoUrl(m.userId); as photoUrl) {
+                  <img [src]="photoUrl" [alt]="memberName(m)" />
+                } @else {
+                  {{ initial(memberName(m)) }}
+                }
+              </span>
               <div class="member-info">
                 <span class="member-email">{{ memberName(m) }}</span>
                 @if (m.isLeader) {
@@ -455,7 +480,13 @@
                       @for (user of memberSearchResults(); track user.id) {
                         <li>
                           <button type="button" class="member-search-option" (click)="selectMemberFromSearch(user)">
-                            <span class="member-avatar">{{ initial(user.displayName) }}</span>
+                            <span class="member-avatar" [class.has-photo]="!!memberPhotoUrl(user.id)">
+                              @if (memberPhotoUrl(user.id); as photoUrl) {
+                                <img [src]="photoUrl" [alt]="user.displayName" />
+                              } @else {
+                                {{ initial(user.displayName) }}
+                              }
+                            </span>
                             <span class="member-search-info">
                               <span class="member-search-name">{{ user.displayName }}</span>
                               <span class="member-search-email">{{ user.email }}</span>
@@ -769,7 +800,18 @@
               <ng-template #commentNode let-comment let-depth="depth">
                 <article class="comment-item" [class.is-reply]="depth > 0" [style.--comment-depth]="depth">
                   <div class="comment-row">
-                    <span class="comment-avatar" [class]="commentAvatarTone(comment.authorUserId)" aria-hidden="true">{{ initial(commentAuthorName(comment)) }}</span>
+                    <span
+                      class="comment-avatar"
+                      [class]="commentAvatarTone(comment.authorUserId)"
+                      [class.has-photo]="!!memberPhotoUrl(comment.authorUserId)"
+                      aria-hidden="true"
+                    >
+                      @if (memberPhotoUrl(comment.authorUserId); as photoUrl) {
+                        <img [src]="photoUrl" [alt]="commentAuthorName(comment)" />
+                      } @else {
+                        {{ initial(commentAuthorName(comment)) }}
+                      }
+                    </span>
                     <div class="comment-content">
                       <div class="comment-bubble">
                         <header class="comment-header">

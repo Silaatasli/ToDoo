@@ -1,6 +1,7 @@
 import { Component, computed, inject, OnInit, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
 import { TeamService } from '../../../core/services/team.service';
 import { UserService } from '../../../core/services/user.service';
 import { TeamListItem } from '../../../models/team.model';
@@ -18,6 +19,7 @@ export class AppLayout implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly teamService = inject(TeamService);
   private readonly userService = inject(UserService);
+  private readonly photoCache = inject(ProfilePhotoCacheService);
   private readonly router = inject(Router);
 
   readonly user = this.auth.getUser();
@@ -31,6 +33,14 @@ export class AppLayout implements OnInit {
     return full || this.user?.email || '';
   });
 
+  readonly photoUrl = computed(() => {
+    const p = this.profile();
+    if (!p?.hasProfilePhoto) {
+      return null;
+    }
+    return this.photoCache.photoUrl(p.id);
+  });
+
   ngOnInit(): void {
     this.teamService.getTeams().subscribe({
       next: (teams) => this.teams.set(teams),
@@ -38,7 +48,10 @@ export class AppLayout implements OnInit {
     });
 
     this.userService.getMyProfile().subscribe({
-      next: (profile) => this.profile.set(profile),
+      next: (profile) => {
+        this.profile.set(profile);
+        this.photoCache.ensure(profile.id, profile.hasProfilePhoto);
+      },
       error: () => this.profile.set(null)
     });
   }

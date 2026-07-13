@@ -55,6 +55,54 @@ public class UsersController : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpPost("me/photo")]
+    [RequestSizeLimit(5 * 1024 * 1024)]
+    public async Task<IActionResult> UploadMyPhoto(IFormFile file)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        if (file is null || file.Length == 0)
+        {
+            return BadRequest(new { success = false, message = "Dosya secilmedi." });
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await _userService.UploadProfilePhotoAsync(
+            userId,
+            file.FileName,
+            file.ContentType,
+            file.Length,
+            stream);
+
+        return result.ToActionResult();
+    }
+
+    [HttpDelete("me/photo")]
+    public async Task<IActionResult> DeleteMyPhoto()
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _userService.DeleteProfilePhotoAsync(userId);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("me/photo")]
+    public async Task<IActionResult> GetMyPhoto()
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        return await DownloadPhotoInternal(userId, userId);
+    }
+
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string q)
     {
@@ -67,6 +115,17 @@ public class UsersController : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpGet("{id:int}/photo")]
+    public async Task<IActionResult> GetPhoto(int id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        return await DownloadPhotoInternal(id, userId);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -77,5 +136,17 @@ public class UsersController : ControllerBase
 
         var result = await _userService.GetProfileAsync(id, userId);
         return result.ToActionResult();
+    }
+
+    private async Task<IActionResult> DownloadPhotoInternal(int targetUserId, int requesterUserId)
+    {
+        var result = await _userService.DownloadProfilePhotoAsync(targetUserId, requesterUserId);
+        if (!result.Success)
+        {
+            return result.ToActionResult();
+        }
+
+        var (stream, contentType, fileName) = result.Data!;
+        return File(stream, contentType, fileName);
     }
 }
