@@ -1,12 +1,12 @@
-.auth-page {
-  --auth-primary: #166866;
-  --auth-primary-hover: #115351;
-  --auth-primary-soft: rgba(22, 104, 102, 0.12);
-  --auth-text: #1a1d26;
-  --auth-muted: #6b7280;
-  --auth-border: #e8ebf0;
-  --auth-error: #dc2626;
-  --auth-error-bg: #fef2f2;
+﻿.auth-page {
+  --auth-primary: var(--primary);
+  --auth-primary-hover: var(--primary-hover);
+  --auth-primary-soft: var(--primary-soft);
+  --auth-text: var(--text);
+  --auth-muted: var(--muted);
+  --auth-border: var(--border);
+  --auth-error: var(--error);
+  --auth-error-bg: var(--error-bg);
 
   min-height: 100vh;
   display: grid;
@@ -15,20 +15,19 @@
   background:
     radial-gradient(circle at 0% 0%, rgba(22, 104, 102, 0.08), transparent 42%),
     radial-gradient(circle at 100% 100%, rgba(42, 157, 139, 0.06), transparent 40%),
-    #f7f8fc;
+    var(--page-bg);
 }
 
 .auth-card {
   width: 100%;
   max-width: 420px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
   backdrop-filter: blur(8px);
   border: 1px solid var(--auth-border);
   border-radius: 20px;
   padding: 2.25rem 2rem 2rem;
-  box-shadow:
-    0 1px 2px rgba(16, 24, 40, 0.04),
-    0 12px 40px rgba(16, 24, 40, 0.08);
+  box-shadow: var(--shadow);
+  color: var(--auth-text);
 }
 
 .brand {
@@ -86,7 +85,7 @@
   span {
     font-size: 0.875rem;
     font-weight: 500;
-    color: #374151;
+    color: var(--text-secondary);
   }
 
   input {
@@ -96,11 +95,11 @@
     border-radius: 12px;
     font-size: 0.975rem;
     color: var(--auth-text);
-    background: #fff;
+    background: var(--input-bg);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
 
     &::placeholder {
-      color: #9ca3af;
+      color: var(--muted);
     }
 
     &:focus {
@@ -128,7 +127,7 @@
   border: none;
   border-radius: 12px;
   background: var(--auth-primary);
-  color: #fff;
+  color: var(--on-primary);
   font-size: 0.975rem;
   font-weight: 600;
   cursor: pointer;

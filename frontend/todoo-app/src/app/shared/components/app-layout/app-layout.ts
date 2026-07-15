@@ -7,6 +7,7 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
 import { RecentItemsService } from '../../../core/services/recent-items.service';
 import { SearchService } from '../../../core/services/search.service';
+import { ThemeService } from '../../../core/services/theme.service';
 import { TeamService } from '../../../core/services/team.service';
 import { UserService } from '../../../core/services/user.service';
 import {
@@ -40,6 +41,7 @@ export class AppLayout implements OnInit {
   private readonly userService = inject(UserService);
   private readonly searchService = inject(SearchService);
   private readonly recentStore = inject(RecentItemsService);
+  private readonly themeService = inject(ThemeService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -48,6 +50,7 @@ export class AppLayout implements OnInit {
   readonly teams = signal<TeamListItem[]>([]);
   readonly collapsed = signal<boolean>(localStorage.getItem(SIDEBAR_KEY) === '1');
   readonly profile = signal<UserProfile | null>(null);
+  readonly theme = this.themeService.theme;
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly searchOpen = signal(false);
@@ -210,6 +213,10 @@ export class AppLayout implements OnInit {
     const next = !this.collapsed();
     this.collapsed.set(next);
     localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
+  }
+
+  toggleTheme(): void {
+    this.themeService.toggle();
   }
 
   onRecentEnter(): void {
