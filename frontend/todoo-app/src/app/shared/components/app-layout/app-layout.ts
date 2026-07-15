@@ -5,6 +5,7 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
+import { RecentItemsService } from '../../../core/services/recent-items.service';
 import { SearchService } from '../../../core/services/search.service';
 import { TeamService } from '../../../core/services/team.service';
 import { UserService } from '../../../core/services/user.service';
@@ -15,6 +16,7 @@ import {
   GlobalSearchTask,
   GlobalSearchTeam
 } from '../../../models/search.model';
+import { RecentItem } from '../../../models/recent-item.model';
 import { TeamListItem } from '../../../models/team.model';
 import { UserProfile } from '../../../models/user.model';
 
@@ -37,6 +39,7 @@ export class AppLayout implements OnInit {
   private readonly teamService = inject(TeamService);
   private readonly userService = inject(UserService);
   private readonly searchService = inject(SearchService);
+  private readonly recentStore = inject(RecentItemsService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
@@ -52,6 +55,10 @@ export class AppLayout implements OnInit {
   readonly searchResults = signal<GlobalSearchResult | null>(null);
   readonly searchQuery = signal('');
   readonly searchActiveIndex = signal(-1);
+
+  readonly recentOpen = signal(false);
+  readonly recentItems = this.recentStore.items;
+  private recentCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly displayName = computed(() => {
     const p = this.profile();
@@ -92,6 +99,8 @@ export class AppLayout implements OnInit {
   });
 
   ngOnInit(): void {
+    this.recentStore.load();
+
     this.teamService.getTeams().subscribe({
       next: (teams) => this.teams.set(teams),
       error: () => this.teams.set([])
@@ -144,6 +153,7 @@ export class AppLayout implements OnInit {
   @HostListener('document:click')
   onDocumentClick(): void {
     this.searchOpen.set(false);
+    this.recentOpen.set(false);
   }
 
   openSearch(event: Event): void {
@@ -202,6 +212,39 @@ export class AppLayout implements OnInit {
     localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0');
   }
 
+  onRecentEnter(): void {
+    if (this.recentCloseTimer) {
+      clearTimeout(this.recentCloseTimer);
+      this.recentCloseTimer = null;
+    }
+    this.recentOpen.set(true);
+  }
+
+  onRecentLeave(): void {
+    if (this.recentCloseTimer) {
+      clearTimeout(this.recentCloseTimer);
+    }
+    this.recentCloseTimer = setTimeout(() => {
+      this.recentOpen.set(false);
+      this.recentCloseTimer = null;
+    }, 180);
+  }
+
+  toggleRecentMenu(event: Event): void {
+    event.stopPropagation();
+    this.recentOpen.update((open) => !open);
+  }
+
+  openRecentItem(item: RecentItem, event: Event): void {
+    event.stopPropagation();
+    this.recentOpen.set(false);
+    this.recentStore.navigate(item);
+  }
+
+  recentKindLabel(kind: RecentItem['kind']): string {
+    return this.recentStore.kindLabel(kind);
+  }
+
   logout(): void {
     this.auth.logout();
     void this.router.navigate(['/login']);
@@ -238,6 +281,15 @@ export class AppLayout implements OnInit {
   private activateNavItem(entry: SearchNavItem): void {
     this.closeSearch();
     if (entry.kind === 'task') {
+      this.recentStore.recordTask({
+        taskId: entry.item.id,
+        title: entry.item.title,
+        teamId: entry.item.teamId,
+        teamName: entry.item.teamName,
+        boardId: entry.item.boardId,
+        boardName: 'Pano',
+        boardColumnTitle: entry.item.boardColumnTitle
+      });
       const boardPath = entry.item.boardId
         ? ['/teams', entry.item.teamId, 'boards', entry.item.boardId]
         : ['/teams', entry.item.teamId, 'board'];
@@ -247,10 +299,20 @@ export class AppLayout implements OnInit {
       return;
     }
     if (entry.kind === 'board') {
+      this.recentStore.recordBoard({
+        boardId: entry.item.id,
+        boardName: entry.item.name,
+        teamId: entry.item.teamId,
+        teamName: entry.item.teamName
+      });
       void this.router.navigate(['/teams', entry.item.teamId, 'boards', entry.item.id]);
       return;
     }
     if (entry.kind === 'team') {
+      this.recentStore.recordTeam({
+        teamId: entry.item.id,
+        teamName: entry.item.name
+      });
       void this.router.navigate(['/teams', entry.item.id, 'board']);
       return;
     }

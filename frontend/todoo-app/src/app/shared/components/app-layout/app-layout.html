@@ -36,6 +36,61 @@
         <span class="side-icon" aria-hidden="true">▦</span>
         <span class="side-text">Takımlarım</span>
       </a>
+
+      <div
+        class="recent-wrap"
+        (mouseenter)="onRecentEnter()"
+        (mouseleave)="onRecentLeave()"
+      >
+        <button
+          type="button"
+          class="side-link recent-trigger"
+          [class.is-open]="recentOpen()"
+          (click)="toggleRecentMenu($event)"
+          [attr.aria-expanded]="recentOpen()"
+          aria-haspopup="true"
+          title="En Son"
+        >
+          <span class="side-icon" aria-hidden="true">◷</span>
+          <span class="side-text">En Son</span>
+        </button>
+
+        @if (recentOpen()) {
+          <div class="recent-flyout" role="menu" (click)="$event.stopPropagation()">
+            <p class="recent-flyout-title">En son</p>
+            @if (recentItems().length === 0) {
+              <p class="recent-empty">Henüz kayıt yok. Panolara veya görevlere girince burada görünür.</p>
+            } @else {
+              <ul class="recent-list">
+                @for (item of recentItems(); track item.key) {
+                  <li role="none">
+                    <button
+                      type="button"
+                      class="recent-item"
+                      role="menuitem"
+                      (click)="openRecentItem(item, $event)"
+                    >
+                      <span class="recent-item-icon" [attr.data-kind]="item.kind" aria-hidden="true">
+                        @if (item.kind === 'task') {
+                          ✓
+                        } @else if (item.kind === 'board') {
+                          ▦
+                        } @else {
+                          {{ teamInitial(item.title) }}
+                        }
+                      </span>
+                      <span class="recent-item-body">
+                        <strong>{{ item.title }}</strong>
+                        <span>{{ recentKindLabel(item.kind) }} · {{ item.subtitle }}</span>
+                      </span>
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
+      </div>
     </nav>
 
     <div class="side-section">

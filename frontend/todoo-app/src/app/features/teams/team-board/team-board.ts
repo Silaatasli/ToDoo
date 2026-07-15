@@ -9,6 +9,7 @@ import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, from,
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
+import { RecentItemsService } from '../../../core/services/recent-items.service';
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
 import { TaskService } from '../../../core/services/task.service';
 import { TeamService } from '../../../core/services/team.service';
@@ -57,10 +58,13 @@ export class TeamBoard implements OnInit {
   private readonly categoryService = inject(CategoryService);
   private readonly auth = inject(AuthService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
+  private readonly recentItems = inject(RecentItemsService);
   private readonly boardHub = inject(TeamBoardHubService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
   private readonly sanitizer = inject(DomSanitizer);
+
+  private lastRecordedBoardId: number | null = null;
 
   readonly teamId = signal<number | null>(null);
   readonly boardId = signal<number | null>(null);
@@ -372,7 +376,7 @@ export class TeamBoard implements OnInit {
 
         if (event.actorUserId !== this.user?.userId) {
           this.remoteTaskDrags.set([]);
-          this.load();
+          this.refreshBoardSilent();
           if (openDetailId) {
             this.refreshDetail(openDetailId);
           }
@@ -641,6 +645,15 @@ export class TeamBoard implements OnInit {
       next: (board) => {
         this.board.set(board);
         this.loading.set(false);
+        if (this.lastRecordedBoardId !== board.boardId) {
+          this.lastRecordedBoardId = board.boardId;
+          this.recentItems.recordBoard({
+            boardId: board.boardId,
+            boardName: board.boardName,
+            teamId: board.teamId,
+            teamName: board.teamName
+          });
+        }
         this.tryOpenPendingTask();
       },
       error: (err: HttpErrorResponse) => {
@@ -653,7 +666,27 @@ export class TeamBoard implements OnInit {
       }
     });
 
-    this.teamService.getTeam(id).subscribe({
+    this.refreshTeamSilent(id);
+  }
+
+  private refreshBoardSilent(): void {
+    const id = this.teamId();
+    const boardId = this.boardId();
+    if (id === null || boardId === null) {
+      return;
+    }
+
+    this.teamService.getBoard(id, boardId).subscribe({
+      next: (board) => {
+        this.board.set(board);
+        this.tryOpenPendingTask();
+      },
+      error: () => {}
+    });
+  }
+
+  private refreshTeamSilent(teamId: number): void {
+    this.teamService.getTeam(teamId).subscribe({
       next: (team) => {
         this.team.set(team);
         this.boards.set(team.boards ?? []);
@@ -1615,7 +1648,15 @@ export class TeamBoard implements OnInit {
       next: () => {
         this.savingColumnEdit.set(false);
         this.editingColumnId.set(null);
-        this.load();
+        const current = this.board();
+        if (current) {
+          this.board.set({
+            ...current,
+            columns: current.columns.map((col) =>
+              col.id === column.id ? { ...col, title: trimmed } : col
+            )
+          });
+        }
       },
       error: (err: HttpErrorResponse) => {
         this.savingColumnEdit.set(false);
@@ -1791,6 +1832,15 @@ export class TeamBoard implements OnInit {
       next: (detail) => {
         this.detail.set(detail);
         this.detailLoading.set(false);
+        this.recentItems.recordTask({
+          taskId: detail.id,
+          title: detail.title,
+          teamId: detail.teamId,
+          teamName: detail.teamName ?? this.board()?.teamName ?? '',
+          boardId: detail.boardId,
+          boardName: this.board()?.boardName ?? 'Pano',
+          boardColumnTitle: detail.boardColumnTitle
+        });
         this.loadTaskActivity(task.id);
         this.loadTaskAttachments(task.id);
         this.loadTaskComments(task.id);
@@ -1972,12 +2022,11 @@ export class TeamBoard implements OnInit {
               }
             : null
         );
-        this.load();
       },
       error: () => {
         this.movingColumn.set(false);
         this.refreshDetail(detail.id);
-        this.load();
+        this.refreshBoardSilent();
       }
     });
   }
@@ -2192,8 +2241,7 @@ export class TeamBoard implements OnInit {
       }
 
       this.teamService.reorderColumns(id, boardId, { columnIds: orderedColumnIds }).subscribe({
-        next: () => this.load(),
-        error: () => this.load()
+        error: () => this.refreshBoardSilent()
       });
       return;
     }
@@ -2217,8 +2265,7 @@ export class TeamBoard implements OnInit {
     this.moveTaskLocally(taskId, source.id, column.id);
 
     this.taskService.moveToColumn(taskId, column.id).subscribe({
-      next: () => this.load(),
-      error: () => this.load()
+      error: () => this.refreshBoardSilent()
     });
   }
 

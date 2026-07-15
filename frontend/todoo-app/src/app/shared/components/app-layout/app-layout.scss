@@ -13,6 +13,9 @@
   border-right: 1px solid #dfe1e6;
   padding: 0.85rem 0.65rem;
   transition: width 0.18s ease;
+  overflow: visible;
+  position: relative;
+  z-index: 30;
 }
 
 .sidebar-head {
@@ -62,6 +65,140 @@
   flex-direction: column;
   gap: 0.15rem;
   margin-bottom: 1rem;
+}
+
+.recent-wrap {
+  position: relative;
+}
+
+.recent-trigger {
+  width: 100%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+
+  &.is-open,
+  &:hover {
+    background: #ebecf0;
+    color: #172b4d;
+  }
+
+  &.is-open {
+    background: #e9eaf8;
+    color: var(--primary);
+  }
+}
+
+.recent-flyout {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 0.4rem);
+  z-index: 40;
+  width: 280px;
+  max-height: min(420px, calc(100vh - 2rem));
+  overflow: auto;
+  padding: 0.55rem;
+  border: 1px solid #dfe1e6;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow:
+    0 8px 24px rgba(9, 30, 66, 0.15),
+    0 0 1px rgba(9, 30, 66, 0.2);
+}
+
+.recent-flyout-title {
+  margin: 0 0 0.4rem;
+  padding: 0.15rem 0.45rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b778c;
+}
+
+.recent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.recent-item {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.48rem 0.45rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+
+  &:hover {
+    background: #f4f5f7;
+  }
+}
+
+.recent-item-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  background: #deebff;
+  color: #0052cc;
+
+  &[data-kind='task'] {
+    background: #e3fcef;
+    color: #006644;
+  }
+
+  &[data-kind='team'] {
+    background: #eae6ff;
+    color: #403294;
+  }
+}
+
+.recent-item-body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.08rem;
+
+  strong {
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #172b4d;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    font-size: 0.74rem;
+    color: #6b778c;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.recent-empty {
+  margin: 0;
+  padding: 0.45rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  color: #6b778c;
 }
 
 .side-link {
@@ -488,7 +625,8 @@
   }
 
   .side-link,
-  .team-link {
+  .team-link,
+  .recent-trigger {
     justify-content: center;
     padding-inline: 0.35rem;
   }
@@ -542,7 +680,8 @@
   }
 
   .side-link,
-  .team-link {
+  .team-link,
+  .recent-trigger {
     justify-content: center;
     padding-inline: 0.35rem;
   }
