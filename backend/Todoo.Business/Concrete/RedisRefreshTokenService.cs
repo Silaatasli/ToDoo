@@ -9,11 +9,11 @@ using Todoo.Business.Security;
 
 namespace Todoo.Business.Concrete;
 
-/// <summary>
+
 /// Refresh token'lari (= kullanici oturumlarini) Redis uzerinde tutar.
 /// Her refresh token bir "session" gibi davranir: kullanici basina birden fazla
 /// aktif token olabilir (farkli cihaz/tarayicilar), tumu tek seferde iptal edilebilir.
-/// </summary>
+
 public class RedisRefreshTokenService : IRefreshTokenService
 {
     private const string RefreshKeyPrefix = "todoo:refresh:";
