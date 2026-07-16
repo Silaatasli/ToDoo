@@ -11,17 +11,20 @@ public class AuthService : IAuthService
     private readonly IPasswordService _passwordService;
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ITeamService _teamService;
+    private readonly IRefreshTokenService _refreshTokenService;
 
     public AuthService(
         IUnitOfWork unitOfWork,
         IPasswordService passwordService,
         IJwtTokenService jwtTokenService,
-        ITeamService teamService)
+        ITeamService teamService,
+        IRefreshTokenService refreshTokenService)
     {
         _unitOfWork = unitOfWork;
         _passwordService = passwordService;
         _jwtTokenService = jwtTokenService;
         _teamService = teamService;
+        _refreshTokenService = refreshTokenService;
     }
 
     public async Task<AuthResultDto> RegisterAsync(string firstName, string lastName, string email, string password)
@@ -74,7 +77,8 @@ public class AuthService : IAuthService
             Email = user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
-            Token = _jwtTokenService.CreateToken(user.Id, user.Email)
+            Token = _jwtTokenService.CreateToken(user.Id, user.Email),
+            RefreshToken = await _refreshTokenService.IssueAsync(user.Id, user.Email)
         };
     }
 
@@ -101,7 +105,55 @@ public class AuthService : IAuthService
             Email = user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
-            Token = _jwtTokenService.CreateToken(user.Id, user.Email)
+            Token = _jwtTokenService.CreateToken(user.Id, user.Email),
+            RefreshToken = await _refreshTokenService.IssueAsync(user.Id, user.Email)
         };
+    }
+
+    public async Task<AuthResultDto> RefreshAsync(string refreshToken)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Refresh token gerekli."
+            };
+        }
+
+        var rotation = await _refreshTokenService.ValidateAndRotateAsync(refreshToken);
+        if (rotation is null)
+        {
+            return new AuthResultDto
+            {
+                Success = false,
+                Message = "Oturum suresi dolmus veya gecersiz. Lutfen tekrar giris yapin."
+            };
+        }
+
+        return new AuthResultDto
+        {
+            Success = true,
+            Message = "Token yenilendi.",
+            UserId = rotation.UserId,
+            Email = rotation.Email,
+            Token = _jwtTokenService.CreateToken(rotation.UserId, rotation.Email),
+            RefreshToken = rotation.NewRefreshToken
+        };
+    }
+
+    public async Task LogoutAsync(string refreshToken)
+    {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            return;
+        }
+
+        await _refreshTokenService.RevokeAsync(refreshToken);
+    }
+
+    public async Task LogoutAllAsync(int userId)
+    {
+        await _refreshTokenService.RevokeAllForUserAsync(userId);
     }
 }

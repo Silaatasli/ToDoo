@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using StackExchange.Redis;
 using Todoo.Business.Abstract;
 using Todoo.Business.Concrete;
 using Todoo.Business.Options;
@@ -24,9 +25,13 @@ builder.Services.AddOpenApi();
 
 builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
 builder.Services.Configure<MinioOptions>(builder.Configuration.GetSection(MinioOptions.SectionName));
+builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt ayarlari bulunamadi.");
+
+var redisOptions = builder.Configuration.GetSection(RedisOptions.SectionName).Get<RedisOptions>()
+    ?? new RedisOptions();
 
 builder.Services.AddCors(options =>
 {
@@ -76,6 +81,13 @@ builder.Services.AddAuthorization();
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ITeamBoardNotifier, TeamBoardNotifier>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
+builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
+{
+    var configuration = ConfigurationOptions.Parse(redisOptions.ConnectionString);
+    configuration.AbortOnConnectFail = false;
+    return ConnectionMultiplexer.Connect(configuration);
+});
+builder.Services.AddScoped<IRefreshTokenService, RedisRefreshTokenService>();
 builder.Services.Configure<LuceneSearchOptions>(options =>
 {
     options.IndexPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "lucene-index");
