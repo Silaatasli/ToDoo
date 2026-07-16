@@ -1,0 +1,56 @@
+<div class="modal-backdrop" (click)="onClose()">
+  <section class="modal-card board-create-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Yeni pano</h2>
+      <button type="button" class="icon-btn" (click)="onClose()" aria-label="Kapat">×</button>
+    </div>
+
+    <form [formGroup]="boardForm" (ngSubmit)="onSubmit()">
+      <label class="field">
+        <span>Pano adı</span>
+        <input type="text" formControlName="name" placeholder="Örn. Sprint 12, Destek" maxlength="200" />
+      </label>
+
+      <div class="field">
+        <span>Pano sütunları</span>
+
+        <div class="column-fields" formArrayName="columns">
+          @for (control of boardColumns.controls; track $index) {
+            <div class="column-field-row">
+              <input
+                type="text"
+                [formControlName]="$index"
+                placeholder="Sütun adı"
+                maxlength="100"
+              />
+              <button
+                type="button"
+                class="remove-column-btn"
+                (click)="removeColumnField($index)"
+                [disabled]="boardColumns.length <= 1"
+                aria-label="Sütunu kaldır"
+              >
+                ×
+              </button>
+            </div>
+          }
+        </div>
+
+        <button type="button" class="add-column-btn" (click)="addColumnField()">+ Sütun ekle</button>
+      </div>
+
+      @if (error()) {
+        <p class="error-box">{{ error() }}</p>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" (click)="onClose()" [disabled]="saving()">
+          İptal
+        </button>
+        <button type="submit" class="primary-btn" [disabled]="saving()">
+          {{ saving() ? 'Oluşturuluyor...' : 'Oluştur' }}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>

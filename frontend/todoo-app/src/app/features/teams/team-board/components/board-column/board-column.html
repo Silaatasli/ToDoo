@@ -1,0 +1,100 @@
+<section
+  class="column"
+  [class.drag-over]="dragOverColumnId() === column().id"
+  [class.column-reorder-over]="dragOverReorderColumnId() === column().id"
+  (dragover)="dragOver.emit($event)"
+  (dragleave)="dragLeave.emit()"
+  (drop)="drop.emit($event)"
+>
+  <header
+    class="column-head"
+    [class.draggable]="isLeader() && editingColumnId() !== column().id"
+    [attr.draggable]="isLeader() && editingColumnId() !== column().id ? 'true' : null"
+    (dragstart)="columnDragStart.emit()"
+    (dragend)="columnDragEnd.emit()"
+  >
+    @if (isEditing()) {
+      <form class="column-edit" [formGroup]="editColumnForm()" (ngSubmit)="saveEdit.emit()">
+        <input
+          type="text"
+          formControlName="title"
+          maxlength="100"
+          autocomplete="off"
+          (keydown.escape)="cancelEdit.emit()"
+        />
+        <button type="submit" class="col-edit-action save" [disabled]="savingColumnEdit()" title="Kaydet">✓</button>
+        <button
+          type="button"
+          class="col-edit-action"
+          (click)="cancelEdit.emit()"
+          [disabled]="savingColumnEdit()"
+          title="İptal"
+        >×</button>
+      </form>
+    } @else {
+      <h2>{{ column().title }}</h2>
+      <div class="column-head-right">
+        <span class="column-count">{{ column().tasks.length }}</span>
+        @if (isLeader()) {
+          <button
+            type="button"
+            class="column-edit-btn"
+            (click)="startEdit.emit()"
+            title="Sütun adını düzenle"
+            aria-label="Sütun adını düzenle"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+            </svg>
+          </button>
+        }
+      </div>
+    }
+  </header>
+  @if (isEditing() && editColumnError()) {
+    <p class="column-edit-error">{{ editColumnError() }}</p>
+  }
+
+  <div class="column-body">
+    @for (remote of remoteDropPreviews(); track remote.userId) {
+      @if (taskByIdFn()(remote.taskId); as remoteTask) {
+        <article class="task-card remote-drag-preview" aria-hidden="true">
+          <span class="remote-drag-badge">{{ remoteDragLabelFn()(remote.userId) }} taşıyor</span>
+          <div class="task-top">
+            <span class="priority-badge" [class]="priorityClass(remoteTask.priority)">
+              {{ priorityLabel(remoteTask.priority) }}
+            </span>
+          </div>
+          <p class="task-title">{{ remoteTask.title }}</p>
+          @if (remoteTask.description) {
+            <p class="task-desc">{{ remoteTask.description }}</p>
+          }
+        </article>
+      }
+    }
+
+    @for (task of column().tasks; track task.id) {
+      @if (!isRemoteDraggingTask(task.id)) {
+        <app-task-card
+          [task]="task"
+          [dragging]="draggedTaskId() === task.id"
+          [remoteDragging]="!!remoteDragInPlace(task.id)"
+          [remoteDragLabel]="remoteDragInPlace(task.id) ? remoteDragLabelFn()(remoteDragInPlace(task.id)!.userId) : null"
+          [photoUrl]="photoUrlFn()(task.assignedToUserId)"
+          [pendingAssignment]="isAssignmentPending(task)"
+          (open)="openTask.emit(task)"
+          (delete)="deleteTask.emit(task)"
+          (dragStart)="taskDragStart.emit({ event: $event, task })"
+          (dragEnd)="taskDragEnd.emit()"
+        />
+      }
+    } @empty {
+      @if (remoteDropPreviews().length === 0) {
+        <p class="column-empty">Görev yok</p>
+      }
+    }
+  </div>
+
+  <button type="button" class="add-task-btn" (click)="addTask.emit()">+ Görev ekle</button>
+</section>

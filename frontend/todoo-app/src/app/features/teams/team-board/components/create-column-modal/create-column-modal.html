@@ -1,0 +1,28 @@
+<div class="modal-backdrop" (click)="onClose()">
+  <section class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Yeni sütun</h2>
+      <button type="button" class="icon-btn" (click)="onClose()" aria-label="Kapat">×</button>
+    </div>
+
+    <form [formGroup]="columnForm" (ngSubmit)="onSubmit()">
+      <label class="field">
+        <span>Sütun başlığı</span>
+        <input type="text" formControlName="title" placeholder="Örn. İncelemede" maxlength="100" />
+      </label>
+
+      @if (error()) {
+        <p class="error-box">{{ error() }}</p>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" (click)="onClose()" [disabled]="saving()">
+          İptal
+        </button>
+        <button type="submit" class="primary-btn" [disabled]="saving()">
+          {{ saving() ? 'Ekleniyor...' : 'Ekle' }}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>

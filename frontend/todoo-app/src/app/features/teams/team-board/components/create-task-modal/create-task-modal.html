@@ -1,0 +1,69 @@
+<div class="modal-backdrop" (click)="onClose()">
+  <section class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Yeni görev</h2>
+      <button type="button" class="icon-btn" (click)="onClose()" aria-label="Kapat">×</button>
+    </div>
+
+    <form [formGroup]="taskForm" (ngSubmit)="onSubmit()">
+      <label class="field">
+        <span>Başlık</span>
+        <input type="text" formControlName="title" placeholder="Görev başlığı" maxlength="200" />
+      </label>
+
+      <label class="field">
+        <span>Açıklama</span>
+        <textarea formControlName="description" rows="3" placeholder="İsteğe bağlı"></textarea>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>Öncelik</span>
+          <select formControlName="priority">
+            @for (option of priorityOptions; track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Kategori</span>
+          <select formControlName="categoryId">
+            <option value="">Kategori yok</option>
+            @for (category of categories(); track category.id) {
+              <option [value]="category.id">{{ category.name }}</option>
+            }
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Bitiş tarihi</span>
+          <input type="date" formControlName="dueDate" />
+        </label>
+      </div>
+
+      <label class="field">
+        <span>Atanan kişi</span>
+        <select formControlName="assignedToUserId">
+          <option value="">Atanmadı</option>
+          @for (m of members(); track m.userId) {
+            <option [value]="m.userId">{{ m.email }}</option>
+          }
+        </select>
+      </label>
+
+      @if (error()) {
+        <p class="error-box">{{ error() }}</p>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="secondary-btn" (click)="onClose()" [disabled]="saving()">
+          İptal
+        </button>
+        <button type="submit" class="primary-btn" [disabled]="saving()">
+          {{ saving() ? 'Ekleniyor...' : 'Ekle' }}
+        </button>
+      </div>
+    </form>
+  </section>
+</div>

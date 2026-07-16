@@ -1,11 +1,8 @@
-import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, DestroyRef, HostListener, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, FormArray, FormControl, ReactiveFormsModule, Validators } from '@angular/forms';
-import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { FormBuilder, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { catchError, concatMap, debounceTime, distinctUntilChanged, EMPTY, from, of, switchMap, toArray } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
@@ -13,39 +10,37 @@ import { RecentItemsService } from '../../../core/services/recent-items.service'
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
 import { TaskService } from '../../../core/services/task.service';
 import { TeamService } from '../../../core/services/team.service';
-import { UserService } from '../../../core/services/user.service';
 import { AppLayout } from '../../../shared/components/app-layout/app-layout';
 import { Category } from '../../../models/category.model';
 import {
   AssignmentStatus,
-  BoardColumn,
   BoardColumnWithTasks,
   BoardListItem,
-  CommentAttachment,
-  CreateCommentRequest,
   Priority,
-  TaskActivityAction,
-  TaskAttachment,
-  TaskComment,
-  TaskDetail,
   TaskListItem,
-  TeamActivityLog,
   TeamBoard as TeamBoardModel,
-  TeamDetail,
-  TeamMember
+  TeamDetail
 } from '../../../models/team.model';
-import { UserSearchResult } from '../../../models/user.model';
-
-interface RemoteTaskDrag {
-  userId: number;
-  taskId: number;
-  sourceColumnId: number;
-  hoverColumnId: number;
-}
+import { initial, memberName, RemoteTaskDrag } from './board-ui.utils';
+import { BoardColumnComponent } from './components/board-column/board-column';
+import { CreateBoardModalComponent, CreateBoardPayload } from './components/create-board-modal/create-board-modal';
+import { CreateColumnModalComponent, CreateColumnPayload } from './components/create-column-modal/create-column-modal';
+import { CreateTaskModalComponent, CreateTaskPayload } from './components/create-task-modal/create-task-modal';
+import { MembersModalComponent } from './components/members-modal/members-modal';
+import { TaskDetailModalComponent } from './components/task-detail-modal/task-detail-modal';
 
 @Component({
   selector: 'app-team-board',
-  imports: [AppLayout, ReactiveFormsModule, DatePipe, RouterLink, NgTemplateOutlet],
+  imports: [
+    AppLayout,
+    RouterLink,
+    BoardColumnComponent,
+    CreateColumnModalComponent,
+    CreateBoardModalComponent,
+    CreateTaskModalComponent,
+    MembersModalComponent,
+    TaskDetailModalComponent
+  ],
   templateUrl: './team-board.html',
   styleUrl: './team-board.scss'
 })
@@ -54,7 +49,6 @@ export class TeamBoard implements OnInit {
   private readonly router = inject(Router);
   private readonly teamService = inject(TeamService);
   private readonly taskService = inject(TaskService);
-  private readonly userService = inject(UserService);
   private readonly categoryService = inject(CategoryService);
   private readonly auth = inject(AuthService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
@@ -62,7 +56,6 @@ export class TeamBoard implements OnInit {
   private readonly boardHub = inject(TeamBoardHubService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
-  private readonly sanitizer = inject(DomSanitizer);
 
   private lastRecordedBoardId: number | null = null;
 
@@ -95,66 +88,8 @@ export class TeamBoard implements OnInit {
   readonly targetColumnId = signal<number | null>(null);
 
   readonly showMembersModal = signal(false);
-  readonly savingMember = signal(false);
-  readonly memberError = signal<string | null>(null);
-  readonly memberSearchResults = signal<UserSearchResult[]>([]);
-  readonly memberSearchLoading = signal(false);
-  readonly showMemberSearchResults = signal(false);
 
-  readonly showNewCategory = signal(false);
-  readonly creatingCategory = signal(false);
-  readonly newCategoryError = signal<string | null>(null);
-  readonly newCategoryControl = this.fb.nonNullable.control('', [Validators.maxLength(100)]);
-
-  readonly showDetailModal = signal(false);
-  readonly detailLoading = signal(false);
-  readonly detail = signal<TaskDetail | null>(null);
-  readonly detailError = signal<string | null>(null);
-  readonly detailEditing = signal(false);
-  readonly savingDetail = signal(false);
-  readonly detailSaveError = signal<string | null>(null);
-  readonly assigning = signal(false);
-  readonly taskActivity = signal<TeamActivityLog[]>([]);
-  readonly taskActivityLoading = signal(false);
-  readonly taskAttachments = signal<TaskAttachment[]>([]);
-  readonly taskAttachmentsLoading = signal(false);
-  readonly uploadingAttachment = signal(false);
-  readonly attachmentDragOver = signal(false);
-  readonly attachmentError = signal<string | null>(null);
-  readonly deletingAttachmentId = signal<number | null>(null);
-  readonly attachmentPreviewUrls = signal<Record<number, string>>({});
-  readonly trustedPreviewUrls = signal<Record<number, SafeResourceUrl>>({});
-  readonly attachmentPreviewLoadingIds = signal<Set<number>>(new Set());
-  readonly selectedAttachmentId = signal<number | null>(null);
-  readonly attachmentLightbox = signal<TaskAttachment | null>(null);
-  readonly attachmentLightboxLoading = signal(false);
-  readonly taskComments = signal<TaskComment[]>([]);
-  readonly taskCommentsLoading = signal(false);
-  readonly postingComment = signal(false);
-  readonly commentError = signal<string | null>(null);
-  readonly replyToCommentId = signal<number | null>(null);
-  readonly pendingCommentFiles = signal<File[]>([]);
-  readonly deletingCommentId = signal<number | null>(null);
-  readonly deletingCommentAttachmentKey = signal<string | null>(null);
-  readonly leftPaneTab = signal<'comments' | 'activity'>('comments');
-  readonly attachmentsExpanded = signal(true);
-  readonly descriptionExpanded = signal(true);
-  readonly activityExpanded = signal(false);
-  readonly detailsExpanded = signal(true);
-  readonly showColumnMenu = signal(false);
-  readonly movingColumn = signal(false);
-
-  readonly commentForm = this.fb.nonNullable.group({
-    body: ['', [Validators.maxLength(4000)]]
-  });
-
-  readonly selectedAttachment = computed(() => {
-    const id = this.selectedAttachmentId();
-    if (id == null) {
-      return null;
-    }
-    return this.taskAttachments().find((attachment) => attachment.id === id) ?? null;
-  });
+  readonly openTaskId = signal<number | null>(null);
 
   readonly deletingTeam = signal(false);
   readonly draggedTaskId = signal<number | null>(null);
@@ -167,10 +102,8 @@ export class TeamBoard implements OnInit {
   readonly assigneeFilter = signal<'all' | 'unassigned' | number>('all');
   readonly showAssigneeFilterMenu = signal(false);
   readonly showPendingOnlyFilter = signal(false);
-  readonly respondingToAssignment = signal(false);
 
   private readonly user = this.auth.getUser();
-  private attachmentPreviewGeneration = 0;
   private pendingOpenTaskId: number | null = null;
 
   readonly assigneeFilterMember = computed(() => {
@@ -237,81 +170,21 @@ export class TeamBoard implements OnInit {
     return current.columns.reduce((total, column) => total + column.tasks.length, 0);
   });
 
-  readonly assignmentStatus = AssignmentStatus;
-
   readonly isLeader = computed(() => {
     const t = this.team();
     return !!t && t.leaderUserId === this.user?.userId;
   });
 
-  readonly priorityOptions = [
-    { value: Priority.Low, label: 'Düşük' },
-    { value: Priority.Medium, label: 'Orta' },
-    { value: Priority.High, label: 'Yüksek' },
-    { value: Priority.Critical, label: 'Kritik' }
-  ];
-
-  private readonly defaultBoardColumns = ['All Tasks', 'In Progress', 'Completed'];
-
-  readonly columnForm = this.fb.nonNullable.group({
-    title: ['', [Validators.required, Validators.maxLength(100)]]
-  });
-
-  readonly boardForm = this.fb.nonNullable.group({
-    name: ['', [Validators.required, Validators.maxLength(200)]],
-    columns: this.fb.array(this.defaultBoardColumns.map((title) => this.buildBoardColumnControl(title)))
-  });
-
-  get boardColumns(): FormArray<FormControl<string>> {
-    return this.boardForm.controls.columns;
-  }
-
-  private buildBoardColumnControl(value = ''): FormControl<string> {
-    return this.fb.nonNullable.control(value, [Validators.maxLength(100)]);
-  }
-
-  private resetBoardColumns(): void {
-    this.boardColumns.clear();
-    this.defaultBoardColumns.forEach((title) => this.boardColumns.push(this.buildBoardColumnControl(title)));
-  }
-
-  addBoardColumnField(): void {
-    this.boardColumns.push(this.buildBoardColumnControl());
-  }
-
-  removeBoardColumnField(index: number): void {
-    if (this.boardColumns.length <= 1) {
-      return;
-    }
-    this.boardColumns.removeAt(index);
-  }
-
   readonly editColumnForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.maxLength(100)]]
   });
 
-  readonly taskForm = this.fb.nonNullable.group({
-    title: ['', [Validators.required, Validators.maxLength(200)]],
-    description: [''],
-    priority: [Priority.Medium, [Validators.required]],
-    categoryId: [''],
-    dueDate: [''],
-    assignedToUserId: ['']
-  });
+  readonly initial = initial;
+  readonly memberName = memberName;
 
-  readonly memberForm = this.fb.nonNullable.group({
-    email: ['', [Validators.required, Validators.email]],
-    searchQuery: ['']
-  });
-
-  readonly detailForm = this.fb.nonNullable.group({
-    title: ['', [Validators.required, Validators.maxLength(200)]],
-    description: [''],
-    priority: [Priority.Medium, [Validators.required]],
-    categoryId: [''],
-    startDate: ['', [Validators.required]],
-    dueDate: ['']
-  });
+  readonly memberPhotoUrlFn = (userId: number | null | undefined) => this.memberPhotoUrl(userId);
+  readonly taskByIdFn = (taskId: number) => this.taskById(taskId);
+  readonly remoteDragLabelFn = (userId: number) => this.remoteDragLabel(userId);
 
   ngOnInit(): void {
     this.categoryService.getAll().subscribe({
@@ -369,23 +242,9 @@ export class TeamBoard implements OnInit {
           return;
         }
 
-        const openDetailId = this.detail()?.id;
-        const affectsOpenDetail =
-          openDetailId !== undefined &&
-          (event.taskId == null || event.taskId === openDetailId);
-
         if (event.actorUserId !== this.user?.userId) {
           this.remoteTaskDrags.set([]);
           this.refreshBoardSilent();
-          if (openDetailId) {
-            this.refreshDetail(openDetailId);
-          }
-        }
-
-        if (this.showDetailModal() && openDetailId && affectsOpenDetail) {
-          this.loadTaskActivity(openDetailId);
-          this.loadTaskAttachments(openDetailId);
-          this.loadTaskComments(openDetailId);
         }
 
         if (event.changeType === 'board-created' || event.changeType === 'board-deleted') {
@@ -433,58 +292,12 @@ export class TeamBoard implements OnInit {
     this.destroyRef.onDestroy(() => {
       void this.boardHub.disconnect();
     });
-
-    this.memberForm.controls.searchQuery.valueChanges
-      .pipe(
-        debounceTime(300),
-        distinctUntilChanged(),
-        switchMap((query) => {
-          const trimmed = query.trim();
-          if (trimmed.length < 3) {
-            this.memberSearchResults.set([]);
-            this.memberSearchLoading.set(false);
-            this.showMemberSearchResults.set(false);
-            return EMPTY;
-          }
-
-          this.showMemberSearchResults.set(true);
-          this.memberSearchLoading.set(true);
-          return this.userService.searchUsers(trimmed).pipe(
-            catchError(() => of<UserSearchResult[]>([]))
-          );
-        }),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe((results) => {
-        this.memberSearchLoading.set(false);
-        const existingMemberIds = new Set((this.team()?.members ?? []).map((member) => member.userId));
-        const filtered = results.filter((user) => !existingMemberIds.has(user.id));
-        this.memberSearchResults.set(filtered);
-        this.photoCache.ensureMany(
-          filtered.map((user) => ({ userId: user.id, hasProfilePhoto: user.hasProfilePhoto }))
-        );
-      });
-  }
-
-  @HostListener('document:keydown.escape')
-  onEscapeKey(): void {
-    if (this.attachmentLightbox()) {
-      this.closeAttachmentLightbox();
-    }
   }
 
   @HostListener('document:click')
   onDocumentClick(): void {
     if (this.showAssigneeFilterMenu()) {
       this.closeAssigneeFilterMenu();
-    }
-
-    if (this.showMemberSearchResults()) {
-      this.closeMemberSearchResults();
-    }
-
-    if (this.showColumnMenu()) {
-      this.closeColumnMenu();
     }
 
     if (this.showBoardMenu()) {
@@ -506,24 +319,7 @@ export class TeamBoard implements OnInit {
     this.showColumnModal.set(false);
     this.showTaskModal.set(false);
     this.showMembersModal.set(false);
-    this.showDetailModal.set(false);
-    this.detail.set(null);
-    this.taskActivity.set([]);
-    this.taskAttachments.set([]);
-    this.selectedAttachmentId.set(null);
-    this.taskComments.set([]);
-    this.replyToCommentId.set(null);
-    this.pendingCommentFiles.set([]);
-    this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(true);
-    this.descriptionExpanded.set(true);
-    this.activityExpanded.set(false);
-    this.detailsExpanded.set(true);
-    this.showColumnMenu.set(false);
-    this.movingColumn.set(false);
-    this.commentForm.reset({ body: '' });
-    this.revokeAttachmentPreviewUrls();
-    this.closeAttachmentLightbox();
+    this.openTaskId.set(null);
     this.board.set(null);
     this.team.set(null);
     this.remoteTaskDrags.set([]);
@@ -566,61 +362,6 @@ export class TeamBoard implements OnInit {
 
   togglePendingOnlyFilter(): void {
     this.showPendingOnlyFilter.update((current) => !current);
-  }
-
-  isAssignmentPending(task: TaskListItem): boolean {
-    return task.assignmentStatus === AssignmentStatus.Pending;
-  }
-
-  canRespondToAssignment(detail: TaskDetail): boolean {
-    return (
-      detail.assignedToUserId === this.user?.userId &&
-      detail.assignmentStatus === AssignmentStatus.Pending
-    );
-  }
-
-  acceptAssignment(detail: TaskDetail): void {
-    if (!this.canRespondToAssignment(detail) || this.respondingToAssignment()) {
-      return;
-    }
-
-    this.respondingToAssignment.set(true);
-    this.taskService.acceptAssignment(detail.id).subscribe({
-      next: () => {
-        this.respondingToAssignment.set(false);
-        this.load();
-        this.refreshDetail(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.respondingToAssignment.set(false);
-        this.detailError.set(err.error?.message ?? 'Görev onaylanamadı.');
-      }
-    });
-  }
-
-  declineAssignment(detail: TaskDetail): void {
-    if (!this.canRespondToAssignment(detail) || this.respondingToAssignment()) {
-      return;
-    }
-
-    if (!confirm('Bu görev atamasını reddetmek istiyor musunuz?')) {
-      return;
-    }
-
-    this.respondingToAssignment.set(true);
-    this.taskService.declineAssignment(detail.id).subscribe({
-      next: () => {
-        this.respondingToAssignment.set(false);
-        this.load();
-        this.refreshDetail(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.respondingToAssignment.set(false);
-        this.detailError.set(err.error?.message ?? 'Görev reddedilemedi.');
-      }
-    });
   }
 
   isAssigneeFilterActive(userId: number): boolean {
@@ -669,7 +410,8 @@ export class TeamBoard implements OnInit {
     this.refreshTeamSilent(id);
   }
 
-  private refreshBoardSilent(): void {
+  /** Used by task-detail modal to refresh board without full-page loading flicker. */
+  refreshBoardSilent(): void {
     const id = this.teamId();
     const boardId = this.boardId();
     if (id === null || boardId === null) {
@@ -752,8 +494,6 @@ export class TeamBoard implements OnInit {
   }
 
   openBoardModal(): void {
-    this.boardForm.controls.name.reset('');
-    this.resetBoardColumns();
     this.boardError.set(null);
     this.showBoardMenu.set(false);
     this.showBoardModal.set(true);
@@ -766,34 +506,26 @@ export class TeamBoard implements OnInit {
     this.showBoardModal.set(false);
   }
 
-  submitBoard(): void {
+  submitBoard(payload: CreateBoardPayload): void {
     const teamId = this.teamId();
-    if (teamId === null || this.boardForm.invalid) {
-      this.boardForm.markAllAsTouched();
+    if (teamId === null) {
       return;
     }
 
     this.savingBoard.set(true);
     this.boardError.set(null);
-    const { name, columns } = this.boardForm.getRawValue();
-    const columnTitles = columns.map((title) => title.trim()).filter((title) => title.length > 0);
 
-    this.teamService
-      .createBoard(teamId, {
-        name: name.trim(),
-        columnTitles: columnTitles.length > 0 ? columnTitles : undefined
-      })
-      .subscribe({
-        next: (board) => {
-          this.savingBoard.set(false);
-          this.showBoardModal.set(false);
-          void this.router.navigate(['/teams', teamId, 'boards', board.id]);
-        },
-        error: (err: HttpErrorResponse) => {
-          this.savingBoard.set(false);
-          this.boardError.set(err.error?.message ?? 'Pano oluşturulamadı.');
-        }
-      });
+    this.teamService.createBoard(teamId, payload).subscribe({
+      next: (board) => {
+        this.savingBoard.set(false);
+        this.showBoardModal.set(false);
+        void this.router.navigate(['/teams', teamId, 'boards', board.id]);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.savingBoard.set(false);
+        this.boardError.set(err.error?.message ?? 'Pano oluşturulamadı.');
+      }
+    });
   }
 
   deleteCurrentBoard(): void {
@@ -831,751 +563,8 @@ export class TeamBoard implements OnInit {
     });
   }
 
-  private loadTaskActivity(taskId: number): void {
-    this.taskActivityLoading.set(true);
-    this.taskService.getTaskActivity(taskId).subscribe({
-      next: (logs) => {
-        this.taskActivity.set(logs);
-        this.taskActivityLoading.set(false);
-      },
-      error: () => {
-        this.taskActivity.set([]);
-        this.taskActivityLoading.set(false);
-      }
-    });
-  }
-
-  private loadTaskAttachments(taskId: number): void {
-    this.taskAttachmentsLoading.set(true);
-    this.attachmentError.set(null);
-    this.taskService.listAttachments(taskId).subscribe({
-      next: (attachments) => {
-        this.taskAttachments.set(attachments);
-        this.taskAttachmentsLoading.set(false);
-        this.syncSelectedAttachment(attachments);
-        this.loadAttachmentPreviews(taskId, attachments);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.taskAttachments.set([]);
-        this.taskAttachmentsLoading.set(false);
-        this.attachmentError.set(err.error?.message ?? 'Ekler yüklenemedi.');
-      }
-    });
-  }
-
-  private loadAttachmentPreviews(taskId: number, attachments: TaskAttachment[]): void {
-    const generation = ++this.attachmentPreviewGeneration;
-    const previewableAttachments = attachments.filter(
-      (attachment) => this.isImageAttachment(attachment) || this.isPdfAttachment(attachment)
-    );
-    const previewableIds = new Set(previewableAttachments.map((attachment) => attachment.id));
-
-    this.pruneAttachmentPreviewUrls(previewableIds);
-
-    const loadingIds = new Set<number>();
-    for (const attachment of previewableAttachments) {
-      if (this.attachmentPreviewUrl(attachment.id)) {
-        continue;
-      }
-
-      loadingIds.add(attachment.id);
-      this.taskService.downloadAttachment(taskId, attachment.id).subscribe({
-        next: (blob) => {
-          if (generation !== this.attachmentPreviewGeneration) {
-            return;
-          }
-
-          this.clearAttachmentPreviewLoading(attachment.id);
-          if (!this.isUsablePreviewBlob(attachment, blob)) {
-            return;
-          }
-
-          this.registerPreviewBlob(attachment, blob);
-        },
-        error: () => {
-          if (generation !== this.attachmentPreviewGeneration) {
-            return;
-          }
-          this.clearAttachmentPreviewLoading(attachment.id);
-        }
-      });
-    }
-
-    this.attachmentPreviewLoadingIds.set(loadingIds);
-  }
-
-  private pruneAttachmentPreviewUrls(validIds: Set<number>): void {
-    this.attachmentPreviewUrls.update((current) => {
-      const next: Record<number, string> = {};
-      for (const [id, url] of Object.entries(current)) {
-        const attachmentId = Number(id);
-        if (validIds.has(attachmentId)) {
-          next[attachmentId] = url;
-        } else {
-          URL.revokeObjectURL(url);
-        }
-      }
-      return next;
-    });
-
-    this.trustedPreviewUrls.update((current) => {
-      const next: Record<number, SafeResourceUrl> = {};
-      for (const [id, url] of Object.entries(current)) {
-        const attachmentId = Number(id);
-        if (validIds.has(attachmentId)) {
-          next[attachmentId] = url;
-        }
-      }
-      return next;
-    });
-  }
-
-  private clearAttachmentPreviewLoading(attachmentId: number): void {
-    this.attachmentPreviewLoadingIds.update((current) => {
-      if (!current.has(attachmentId)) {
-        return current;
-      }
-      const next = new Set(current);
-      next.delete(attachmentId);
-      return next;
-    });
-  }
-
-  attachmentPreviewLoading(attachmentId: number): boolean {
-    return this.attachmentPreviewLoadingIds().has(attachmentId);
-  }
-
-  onAttachmentThumbError(attachmentId: number): void {
-    const url = this.attachmentPreviewUrls()[attachmentId];
-    if (url) {
-      URL.revokeObjectURL(url);
-    }
-
-    this.attachmentPreviewUrls.update((current) => {
-      const next = { ...current };
-      delete next[attachmentId];
-      return next;
-    });
-
-    this.trustedPreviewUrls.update((current) => {
-      const next = { ...current };
-      delete next[attachmentId];
-      return next;
-    });
-  }
-
-  private isUsablePreviewBlob(attachment: TaskAttachment, blob: Blob): boolean {
-    if (!blob || blob.size === 0) {
-      return false;
-    }
-
-    const mime = (blob.type || attachment.contentType || '').toLowerCase();
-    if (mime.includes('json') || mime.includes('html') || mime.includes('text/plain')) {
-      return false;
-    }
-
-    if (this.isImageAttachment(attachment) && blob.size < 64) {
-      return false;
-    }
-
-    if (this.isPdfAttachment(attachment) && blob.size < 5) {
-      return false;
-    }
-
-    return true;
-  }
-
-  private registerPreviewBlob(attachment: TaskAttachment, blob: Blob): void {
-    const contentType = this.resolvePreviewContentType(attachment, blob);
-    const typedBlob = blob.type === contentType ? blob : new Blob([blob], { type: contentType });
-    const url = URL.createObjectURL(typedBlob);
-
-    const existingUrl = this.attachmentPreviewUrls()[attachment.id];
-    if (existingUrl) {
-      URL.revokeObjectURL(existingUrl);
-    }
-
-    this.attachmentPreviewUrls.update((current) => ({ ...current, [attachment.id]: url }));
-    this.trustedPreviewUrls.update((current) => ({
-      ...current,
-      [attachment.id]: this.sanitizer.bypassSecurityTrustResourceUrl(url)
-    }));
-  }
-
-  private resolvePreviewContentType(attachment: TaskAttachment, blob: Blob): string {
-    if (this.isPdfAttachment(attachment)) {
-      return 'application/pdf';
-    }
-
-    if (this.isImageAttachment(attachment)) {
-      return blob.type || attachment.contentType || 'image/jpeg';
-    }
-
-    return blob.type || attachment.contentType || 'application/octet-stream';
-  }
-
-  private syncSelectedAttachment(attachments: TaskAttachment[]): void {
-    const currentId = this.selectedAttachmentId();
-    if (currentId != null && attachments.some((attachment) => attachment.id === currentId)) {
-      return;
-    }
-
-    this.selectedAttachmentId.set(attachments[0]?.id ?? null);
-  }
-
-  selectAttachment(attachment: TaskAttachment): void {
-    this.selectedAttachmentId.set(attachment.id);
-    this.ensureAttachmentPreview(attachment);
-  }
-
-  private ensureAttachmentPreview(attachment: TaskAttachment): void {
-    const detail = this.detail();
-    if (!detail) {
-      return;
-    }
-
-    if (!this.isImageAttachment(attachment) && !this.isPdfAttachment(attachment)) {
-      return;
-    }
-
-    if (this.attachmentPreviewUrl(attachment.id)) {
-      return;
-    }
-
-    this.taskService.downloadAttachment(detail.id, attachment.id).subscribe({
-      next: (blob) => this.registerPreviewBlob(attachment, blob),
-      error: () => {}
-    });
-  }
-
-  attachmentPreviewUrl(attachmentId: number): string | null {
-    return this.attachmentPreviewUrls()[attachmentId] ?? null;
-  }
-
-  trustedAttachmentPreviewUrl(attachmentId: number): SafeResourceUrl | null {
-    return this.trustedPreviewUrls()[attachmentId] ?? null;
-  }
-
-  lightboxTrustedPreviewUrl(): SafeResourceUrl | null {
-    const attachment = this.attachmentLightbox();
-    if (!attachment) {
-      return null;
-    }
-    return this.trustedAttachmentPreviewUrl(attachment.id);
-  }
-
-  private revokeAttachmentPreviewUrls(): void {
-    for (const url of Object.values(this.attachmentPreviewUrls())) {
-      URL.revokeObjectURL(url);
-    }
-    this.attachmentPreviewUrls.set({});
-    this.trustedPreviewUrls.set({});
-  }
-
-  onAttachmentSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = '';
-    if (!file) {
-      return;
-    }
-    this.uploadAttachmentFile(file);
-  }
-
-  onAttachmentDragOver(event: DragEvent): void {
-    if (this.uploadingAttachment()) {
-      return;
-    }
-    event.preventDefault();
-    event.stopPropagation();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'copy';
-    }
-    this.attachmentDragOver.set(true);
-  }
-
-  onAttachmentDragLeave(event: DragEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    const related = event.relatedTarget as Node | null;
-    const current = event.currentTarget as HTMLElement;
-    if (!related || !current.contains(related)) {
-      this.attachmentDragOver.set(false);
-    }
-  }
-
-  onAttachmentDrop(event: DragEvent): void {
-    event.preventDefault();
-    event.stopPropagation();
-    this.attachmentDragOver.set(false);
-    if (this.uploadingAttachment()) {
-      return;
-    }
-    const file = event.dataTransfer?.files?.[0];
-    if (!file) {
-      return;
-    }
-    this.uploadAttachmentFile(file);
-  }
-
-  private uploadAttachmentFile(file: File): void {
-    const detail = this.detail();
-    if (!detail) {
-      return;
-    }
-
-    this.uploadingAttachment.set(true);
-    this.attachmentError.set(null);
-
-    this.taskService.uploadAttachment(detail.id, file).subscribe({
-      next: () => {
-        this.uploadingAttachment.set(false);
-        this.attachmentsExpanded.set(true);
-        this.loadTaskAttachments(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.uploadingAttachment.set(false);
-        this.attachmentError.set(err.error?.message ?? 'Dosya yüklenemedi.');
-      }
-    });
-  }
-
-  private loadTaskComments(taskId: number): void {
-    this.taskCommentsLoading.set(true);
-    this.commentError.set(null);
-    this.taskService.listComments(taskId).subscribe({
-      next: (comments) => {
-        this.taskComments.set(comments);
-        this.taskCommentsLoading.set(false);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.taskComments.set([]);
-        this.taskCommentsLoading.set(false);
-        this.commentError.set(err.error?.message ?? 'Yorumlar yüklenemedi.');
-      }
-    });
-  }
-
-  startReplyToComment(commentId: number): void {
-    this.replyToCommentId.set(commentId);
-    this.leftPaneTab.set('comments');
-    this.commentError.set(null);
-  }
-
-  cancelReply(): void {
-    this.replyToCommentId.set(null);
-  }
-
-  setLeftPaneTab(tab: 'comments' | 'activity'): void {
-    this.leftPaneTab.set(tab);
-  }
-
-  toggleAttachmentsPanel(): void {
-    this.attachmentsExpanded.update((expanded) => !expanded);
-  }
-
-  toggleDescriptionSection(): void {
-    this.descriptionExpanded.update((expanded) => !expanded);
-  }
-
-  toggleActivitySection(): void {
-    this.activityExpanded.update((expanded) => !expanded);
-  }
-
-  toggleDetailsSection(): void {
-    this.detailsExpanded.update((expanded) => !expanded);
-  }
-
-  onCommentFilesSelected(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const files = input.files ? Array.from(input.files) : [];
-    input.value = '';
-    if (files.length === 0) {
-      return;
-    }
-    this.pendingCommentFiles.update((current) => [...current, ...files]);
-  }
-
-  removePendingCommentFile(index: number): void {
-    this.pendingCommentFiles.update((current) => current.filter((_, i) => i !== index));
-  }
-
-  submitComment(): void {
-    const detail = this.detail();
-    if (!detail || this.postingComment()) {
-      return;
-    }
-
-    const body = this.commentForm.controls.body.value.trim();
-    const files = this.pendingCommentFiles();
-    if (!body && files.length === 0) {
-      this.commentError.set('Yorum yazın veya dosya ekleyin.');
-      return;
-    }
-
-    const request: CreateCommentRequest = {
-      body: body || (files.length > 0 ? '(dosya eki)' : ''),
-      parentCommentId: this.replyToCommentId()
-    };
-
-    this.postingComment.set(true);
-    this.commentError.set(null);
-
-    this.taskService.createComment(detail.id, request).pipe(
-      switchMap((comment) => {
-        if (files.length === 0) {
-          return of(comment);
-        }
-        return from(files).pipe(
-          concatMap((file) => this.taskService.uploadCommentAttachment(detail.id, comment.id, file)),
-          toArray(),
-          switchMap(() => of(comment))
-        );
-      })
-    ).subscribe({
-      next: () => {
-        this.postingComment.set(false);
-        this.commentForm.reset({ body: '' });
-        this.pendingCommentFiles.set([]);
-        this.replyToCommentId.set(null);
-        this.loadTaskComments(detail.id);
-        this.loadTaskAttachments(detail.id);
-        this.attachmentsExpanded.set(true);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.postingComment.set(false);
-        this.commentError.set(err.error?.message ?? 'Yorum gönderilemedi.');
-      }
-    });
-  }
-
-  deleteComment(comment: TaskComment): void {
-    const detail = this.detail();
-    if (!detail || !confirm('Bu yorum ve tüm yanıtları silinsin mi?')) {
-      return;
-    }
-
-    this.deletingCommentId.set(comment.id);
-    this.commentError.set(null);
-
-    this.taskService.deleteComment(detail.id, comment.id).subscribe({
-      next: () => {
-        this.deletingCommentId.set(null);
-        if (this.replyToCommentId() === comment.id) {
-          this.replyToCommentId.set(null);
-        }
-        this.loadTaskComments(detail.id);
-        this.loadTaskAttachments(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.deletingCommentId.set(null);
-        this.commentError.set(err.error?.message ?? 'Yorum silinemedi.');
-      }
-    });
-  }
-
-  downloadCommentAttachment(comment: TaskComment, attachment: CommentAttachment): void {
-    const detail = this.detail();
-    if (!detail) {
-      return;
-    }
-
-    this.taskService.downloadCommentAttachment(detail.id, comment.id, attachment.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = attachment.fileName;
-        anchor.click();
-        URL.revokeObjectURL(url);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.commentError.set(err.error?.message ?? 'Dosya indirilemedi.');
-      }
-    });
-  }
-
-  deleteCommentAttachment(comment: TaskComment, attachment: CommentAttachment): void {
-    const detail = this.detail();
-    if (!detail || !confirm(`"${attachment.fileName}" dosyası silinsin mi?`)) {
-      return;
-    }
-
-    const key = `${comment.id}-${attachment.id}`;
-    this.deletingCommentAttachmentKey.set(key);
-    this.commentError.set(null);
-
-    this.taskService.deleteCommentAttachment(detail.id, comment.id, attachment.id).subscribe({
-      next: () => {
-        this.deletingCommentAttachmentKey.set(null);
-        this.loadTaskComments(detail.id);
-        this.loadTaskAttachments(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.deletingCommentAttachmentKey.set(null);
-        this.commentError.set(err.error?.message ?? 'Dosya silinemedi.');
-      }
-    });
-  }
-
-  commentAuthorName(comment: TaskComment): string {
-    const member = this.team()?.members.find((m) => m.userId === comment.authorUserId);
-    if (member) {
-      return this.memberName(member);
-    }
-    return comment.authorEmail || 'Bir kullanıcı';
-  }
-
-  commentAvatarTone(userId: number): string {
-    const tones = ['tone-a', 'tone-b', 'tone-c', 'tone-d', 'tone-e', 'tone-f'];
-    return tones[Math.abs(userId) % tones.length];
-  }
-
-  canDeleteComment(comment: TaskComment): boolean {
-    const detail = this.detail();
-    const userId = this.user?.userId;
-    if (!detail || userId == null) {
-      return false;
-    }
-    return (
-      comment.authorUserId === userId ||
-      detail.createdByUserId === userId ||
-      this.isLeader()
-    );
-  }
-
-  canDeleteCommentAttachment(comment: TaskComment, attachment: CommentAttachment): boolean {
-    const userId = this.user?.userId;
-    if (userId == null) {
-      return false;
-    }
-    return (
-      attachment.uploadedByUserId === userId ||
-      comment.authorUserId === userId ||
-      this.canDeleteComment(comment)
-    );
-  }
-
-  isImageCommentAttachment(attachment: CommentAttachment): boolean {
-    return attachment.contentType.startsWith('image/');
-  }
-
-  isPdfCommentAttachment(attachment: CommentAttachment): boolean {
-    return attachment.contentType === 'application/pdf';
-  }
-
-  replyTargetLabel(): string | null {
-    const replyId = this.replyToCommentId();
-    if (replyId == null) {
-      return null;
-    }
-    const target = this.findCommentById(this.taskComments(), replyId);
-    return target ? this.commentAuthorName(target) : null;
-  }
-
-  private findCommentById(comments: TaskComment[], commentId: number): TaskComment | null {
-    for (const comment of comments) {
-      if (comment.id === commentId) {
-        return comment;
-      }
-      const nested = this.findCommentById(comment.replies ?? [], commentId);
-      if (nested) {
-        return nested;
-      }
-    }
-    return null;
-  }
-
-  openAttachmentFile(attachment: TaskAttachment): void {
-    this.attachmentLightbox.set(attachment);
-
-    const existingUrl = this.attachmentPreviewUrl(attachment.id);
-    if (existingUrl) {
-      this.attachmentLightboxLoading.set(false);
-      return;
-    }
-
-    const detail = this.detail();
-    if (!detail) {
-      return;
-    }
-
-    this.attachmentLightboxLoading.set(true);
-    this.taskService.downloadAttachment(detail.id, attachment.id).subscribe({
-      next: (blob) => {
-        this.registerPreviewBlob(attachment, blob);
-        this.attachmentLightboxLoading.set(false);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.attachmentLightboxLoading.set(false);
-        this.attachmentLightbox.set(null);
-        this.attachmentError.set(err.error?.message ?? 'Dosya açılamadı.');
-      }
-    });
-  }
-
-  closeAttachmentLightbox(): void {
-    this.attachmentLightbox.set(null);
-    this.attachmentLightboxLoading.set(false);
-  }
-
-  lightboxPreviewUrl(): string | null {
-    const attachment = this.attachmentLightbox();
-    if (!attachment) {
-      return null;
-    }
-    return this.attachmentPreviewUrl(attachment.id);
-  }
-
-  downloadAttachmentFile(attachment: TaskAttachment): void {
-    const detail = this.detail();
-    if (!detail) {
-      return;
-    }
-
-    this.taskService.downloadAttachment(detail.id, attachment.id).subscribe({
-      next: (blob) => {
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = attachment.fileName;
-        anchor.click();
-        URL.revokeObjectURL(url);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.attachmentError.set(err.error?.message ?? 'Dosya indirilemedi.');
-      }
-    });
-  }
-
-  deleteAttachmentFile(attachment: TaskAttachment): void {
-    const detail = this.detail();
-    if (!detail || !confirm(`"${attachment.fileName}" dosyası silinsin mi?`)) {
-      return;
-    }
-
-    this.deletingAttachmentId.set(attachment.id);
-    this.attachmentError.set(null);
-
-    this.taskService.deleteAttachment(detail.id, attachment.id).subscribe({
-      next: () => {
-        this.deletingAttachmentId.set(null);
-        this.loadTaskAttachments(detail.id);
-        this.loadTaskActivity(detail.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.deletingAttachmentId.set(null);
-        this.attachmentError.set(err.error?.message ?? 'Dosya silinemedi.');
-      }
-    });
-  }
-
-  canDeleteAttachment(attachment: TaskAttachment): boolean {
-    const detail = this.detail();
-    const team = this.team();
-    const userId = this.user?.userId;
-    if (!detail || userId == null) {
-      return false;
-    }
-
-    return (
-      attachment.uploadedByUserId === userId ||
-      detail.createdByUserId === userId ||
-      team?.leaderUserId === userId
-    );
-  }
-
-  isImageAttachment(attachment: TaskAttachment): boolean {
-    if (attachment.contentType.startsWith('image/')) {
-      return true;
-    }
-
-    return /\.(jpe?g|png|gif|webp)$/i.test(attachment.fileName);
-  }
-
-  isPdfAttachment(attachment: TaskAttachment): boolean {
-    return (
-      attachment.contentType === 'application/pdf' ||
-      attachment.fileName.toLowerCase().endsWith('.pdf')
-    );
-  }
-
-  attachmentKindLabel(attachment: TaskAttachment): string {
-    if (this.isImageAttachment(attachment)) {
-      return 'Görsel';
-    }
-    if (this.isPdfAttachment(attachment)) {
-      return 'PDF';
-    }
-    return 'Dosya';
-  }
-
-  formatFileSize(bytes: number): string {
-    if (bytes < 1024) {
-      return `${bytes} B`;
-    }
-    if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  toLocalDate(value: string): Date {
-    const hasTimezone = /[zZ]|[+-]\d{2}:\d{2}$/.test(value);
-    return new Date(hasTimezone ? value : `${value}Z`);
-  }
-
-  private logUserName(log: TeamActivityLog): string {
-    const member = this.team()?.members.find((m) => m.userId === log.userId);
-    if (member) {
-      return this.memberName(member);
-    }
-    return log.userEmail || 'Bir kullanıcı';
-  }
-
-  activityText(log: TeamActivityLog): string {
-    const who = this.logUserName(log);
-    switch (log.actionType) {
-      case TaskActivityAction.TaskCreated:
-        return `${who}, "${log.newValue}" görevini oluşturdu.`;
-      case TaskActivityAction.Assigned:
-        if (log.newValue && log.oldValue) {
-          return `${who}, atamayı "${log.oldValue}" → "${log.newValue}" olarak değiştirdi.`;
-        }
-        if (log.newValue) {
-          return `${who}, görevi "${log.newValue}" kişisine atadı.`;
-        }
-        return `${who}, görevin atamasını kaldırdı.`;
-      case TaskActivityAction.ColumnChanged:
-        return `${who}, görevi "${log.oldValue}" sütunundan "${log.newValue}" sütununa taşıdı.`;
-      case TaskActivityAction.Updated:
-        return `${who}, "${log.newValue}" görevini güncelledi.`;
-      case TaskActivityAction.Deleted:
-        return `${who}, "${log.oldValue}" görevini sildi.`;
-      case TaskActivityAction.AssignmentAccepted:
-        return `${who}, görev atamasını onayladı.`;
-      case TaskActivityAction.AssignmentDeclined:
-        return `${who}, görev atamasını reddetti.`;
-      case TaskActivityAction.AttachmentAdded:
-        return `${who}, "${log.newValue}" dosyasını ekledi.`;
-      case TaskActivityAction.AttachmentDeleted:
-        return `${who}, "${log.oldValue}" dosyasını sildi.`;
-      case TaskActivityAction.CommentAdded:
-        return `${who}, yorum ekledi: "${log.newValue}"`;
-      case TaskActivityAction.CommentDeleted:
-        return `${who}, bir yorumu sildi: "${log.oldValue}"`;
-      default:
-        return `${who}, bir işlem yaptı.`;
-    }
-  }
-
   // ---- Column ----
   openColumnModal(): void {
-    this.columnForm.reset({ title: '' });
     this.columnError.set(null);
     this.showColumnModal.set(true);
   }
@@ -1587,19 +576,17 @@ export class TeamBoard implements OnInit {
     this.showColumnModal.set(false);
   }
 
-  submitColumn(): void {
+  submitColumn(payload: CreateColumnPayload): void {
     const id = this.teamId();
     const boardId = this.boardId();
-    if (id === null || boardId === null || this.columnForm.invalid) {
-      this.columnForm.markAllAsTouched();
+    if (id === null || boardId === null) {
       return;
     }
 
     this.savingColumn.set(true);
     this.columnError.set(null);
 
-    const { title } = this.columnForm.getRawValue();
-    this.teamService.addColumn(id, boardId, { title: title.trim() }).subscribe({
+    this.teamService.addColumn(id, boardId, payload).subscribe({
       next: () => {
         this.savingColumn.set(false);
         this.showColumnModal.set(false);
@@ -1680,56 +667,8 @@ export class TeamBoard implements OnInit {
   // ---- Task ----
   openTaskModal(columnId: number): void {
     this.targetColumnId.set(columnId);
-    this.taskForm.reset({
-      title: '',
-      description: '',
-      priority: Priority.Medium,
-      categoryId: '',
-      dueDate: '',
-      assignedToUserId: ''
-    });
     this.taskError.set(null);
     this.showTaskModal.set(true);
-  }
-
-  toggleNewCategory(): void {
-    this.showNewCategory.update((v) => !v);
-    this.newCategoryError.set(null);
-    this.newCategoryControl.reset('');
-  }
-
-  private resetNewCategory(): void {
-    this.showNewCategory.set(false);
-    this.newCategoryError.set(null);
-    this.newCategoryControl.reset('');
-  }
-
-  createCategoryInline(): void {
-    const name = this.newCategoryControl.getRawValue().trim();
-    if (!name) {
-      this.newCategoryError.set('Kategori adı boş olamaz.');
-      return;
-    }
-
-    this.creatingCategory.set(true);
-    this.newCategoryError.set(null);
-
-    this.categoryService.create({ name }).subscribe({
-      next: (category) => {
-        this.creatingCategory.set(false);
-        this.categories.update((list) => [...list, category]);
-        this.detailForm.controls.categoryId.setValue(String(category.id));
-        this.resetNewCategory();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.creatingCategory.set(false);
-        this.newCategoryError.set(
-          typeof err.error === 'string'
-            ? err.error
-            : (err.error?.message ?? 'Kategori eklenemedi.')
-        );
-      }
-    });
   }
 
   closeTaskModal(): void {
@@ -1739,29 +678,27 @@ export class TeamBoard implements OnInit {
     this.showTaskModal.set(false);
   }
 
-  submitTask(): void {
+  submitTask(payload: CreateTaskPayload): void {
     const id = this.teamId();
     const boardId = this.boardId();
     const columnId = this.targetColumnId();
-    if (id === null || boardId === null || columnId === null || this.taskForm.invalid) {
-      this.taskForm.markAllAsTouched();
+    if (id === null || boardId === null || columnId === null) {
       return;
     }
 
     this.savingTask.set(true);
     this.taskError.set(null);
 
-    const raw = this.taskForm.getRawValue();
     this.teamService
       .createTask(id, boardId, {
-        title: raw.title.trim(),
-        description: raw.description.trim() || null,
-        categoryId: raw.categoryId ? Number(raw.categoryId) : null,
-        priority: Number(raw.priority) as Priority,
+        title: payload.title,
+        description: payload.description,
+        categoryId: payload.categoryId,
+        priority: payload.priority as Priority,
         startDate: new Date().toISOString(),
-        dueDate: raw.dueDate ? new Date(raw.dueDate).toISOString() : null,
+        dueDate: payload.dueDate ? new Date(payload.dueDate).toISOString() : null,
         boardColumnId: columnId,
-        assignedToUserId: raw.assignedToUserId ? Number(raw.assignedToUserId) : null
+        assignedToUserId: payload.assignedToUserId
       })
       .subscribe({
         next: () => {
@@ -1793,63 +730,14 @@ export class TeamBoard implements OnInit {
     }
 
     this.taskService.delete(task.id).subscribe({
-      next: () => {
-        if (this.detail()?.id === task.id) {
-          this.showDetailModal.set(false);
-          this.detail.set(null);
-        }
-        this.load();
-      },
+      next: () => this.load(),
       error: () => this.load()
     });
   }
 
-  // ---- Task detail / edit ----
+  // ---- Task detail ----
   openTaskDetail(task: TaskListItem): void {
-    this.showDetailModal.set(true);
-    this.detailEditing.set(false);
-    this.detailError.set(null);
-    this.detailSaveError.set(null);
-    this.detailLoading.set(true);
-    this.detail.set(null);
-    this.taskActivity.set([]);
-    this.taskAttachments.set([]);
-    this.selectedAttachmentId.set(null);
-    this.taskComments.set([]);
-    this.replyToCommentId.set(null);
-    this.pendingCommentFiles.set([]);
-    this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(true);
-    this.descriptionExpanded.set(true);
-    this.activityExpanded.set(false);
-    this.detailsExpanded.set(true);
-    this.showColumnMenu.set(false);
-    this.movingColumn.set(false);
-    this.commentForm.reset({ body: '' });
-    this.revokeAttachmentPreviewUrls();
-
-    this.taskService.getTask(task.id).subscribe({
-      next: (detail) => {
-        this.detail.set(detail);
-        this.detailLoading.set(false);
-        this.recentItems.recordTask({
-          taskId: detail.id,
-          title: detail.title,
-          teamId: detail.teamId,
-          teamName: detail.teamName ?? this.board()?.teamName ?? '',
-          boardId: detail.boardId,
-          boardName: this.board()?.boardName ?? 'Pano',
-          boardColumnTitle: detail.boardColumnTitle
-        });
-        this.loadTaskActivity(task.id);
-        this.loadTaskAttachments(task.id);
-        this.loadTaskComments(task.id);
-      },
-      error: (err: HttpErrorResponse) => {
-        this.detailLoading.set(false);
-        this.detailError.set(err.error?.message ?? 'Görev detayı yüklenemedi.');
-      }
-    });
+    this.openTaskId.set(task.id);
   }
 
   private tryOpenPendingTask(): void {
@@ -1859,7 +747,7 @@ export class TeamBoard implements OnInit {
     }
 
     this.pendingOpenTaskId = null;
-    this.openTaskDetail({ id: taskId } as TaskListItem);
+    this.openTaskId.set(taskId);
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {},
@@ -1867,182 +755,12 @@ export class TeamBoard implements OnInit {
     });
   }
 
-  closeDetailModal(): void {
-    if (this.savingDetail()) {
-      return;
-    }
-    this.showDetailModal.set(false);
-    this.detailEditing.set(false);
-    this.detail.set(null);
-    this.taskActivity.set([]);
-    this.taskAttachments.set([]);
-    this.selectedAttachmentId.set(null);
-    this.taskComments.set([]);
-    this.replyToCommentId.set(null);
-    this.pendingCommentFiles.set([]);
-    this.leftPaneTab.set('comments');
-    this.attachmentsExpanded.set(true);
-    this.descriptionExpanded.set(true);
-    this.activityExpanded.set(false);
-    this.detailsExpanded.set(true);
-    this.showColumnMenu.set(false);
-    this.movingColumn.set(false);
-    this.commentForm.reset({ body: '' });
-    this.revokeAttachmentPreviewUrls();
-    this.closeAttachmentLightbox();
+  closeTaskDetail(): void {
+    this.openTaskId.set(null);
   }
 
-  startDetailEdit(): void {
-    const d = this.detail();
-    if (!d) {
-      return;
-    }
-    this.detailSaveError.set(null);
-    this.detailForm.setValue({
-      title: d.title,
-      description: d.description ?? '',
-      priority: d.priority,
-      categoryId: d.categoryId != null ? String(d.categoryId) : '',
-      startDate: this.toDateInput(d.startDate),
-      dueDate: d.dueDate ? this.toDateInput(d.dueDate) : ''
-    });
-    this.resetNewCategory();
-    this.detailEditing.set(true);
-  }
-
-  cancelDetailEdit(): void {
-    if (this.savingDetail()) {
-      return;
-    }
-    this.detailEditing.set(false);
-    this.detailSaveError.set(null);
-    this.resetNewCategory();
-  }
-
-  saveDetail(): void {
-    const d = this.detail();
-    if (!d || this.detailForm.invalid) {
-      this.detailForm.markAllAsTouched();
-      return;
-    }
-
-    this.savingDetail.set(true);
-    this.detailSaveError.set(null);
-
-    const raw = this.detailForm.getRawValue();
-    this.taskService
-      .updateTask(d.id, {
-        title: raw.title.trim(),
-        description: raw.description.trim() || null,
-        categoryId: raw.categoryId ? Number(raw.categoryId) : null,
-        priority: Number(raw.priority) as Priority,
-        startDate: new Date(raw.startDate).toISOString(),
-        dueDate: raw.dueDate ? new Date(raw.dueDate).toISOString() : null
-      })
-      .subscribe({
-        next: () => {
-          this.savingDetail.set(false);
-          this.detailEditing.set(false);
-          this.refreshDetail(d.id);
-          this.load();
-        },
-        error: (err: HttpErrorResponse) => {
-          this.savingDetail.set(false);
-          this.detailSaveError.set(err.error?.message ?? 'Görev güncellenemedi.');
-        }
-      });
-  }
-
-  changeAssignee(value: string): void {
-    const d = this.detail();
-    if (!d) {
-      return;
-    }
-
-    const assignedToUserId = value ? Number(value) : null;
-    this.assigning.set(true);
-    this.taskService.assign(d.id, assignedToUserId).subscribe({
-      next: () => {
-        this.assigning.set(false);
-        this.refreshDetail(d.id);
-        this.load();
-      },
-      error: () => {
-        this.assigning.set(false);
-        this.refreshDetail(d.id);
-      }
-    });
-  }
-
-  toggleDetailComplete(): void {
-    const d = this.detail();
-    if (!d) {
-      return;
-    }
-
-    const request = d.isCompleted ? this.taskService.reopen(d.id) : this.taskService.complete(d.id);
-    request.subscribe({
-      next: () => {
-        this.refreshDetail(d.id);
-        this.load();
-      },
-      error: () => this.refreshDetail(d.id)
-    });
-  }
-
-  toggleColumnMenu(): void {
-    this.showColumnMenu.update((open) => !open);
-  }
-
-  closeColumnMenu(): void {
-    this.showColumnMenu.set(false);
-  }
-
-  selectDetailColumn(column: BoardColumn): void {
-    const detail = this.detail();
-    if (!detail || detail.boardColumnId === column.id || this.movingColumn()) {
-      this.closeColumnMenu();
-      return;
-    }
-
-    this.movingColumn.set(true);
-    this.closeColumnMenu();
-    this.moveTaskLocally(detail.id, detail.boardColumnId, column.id);
-
-    this.taskService.moveToColumn(detail.id, column.id).subscribe({
-      next: () => {
-        this.movingColumn.set(false);
-        this.detail.update((current) =>
-          current
-            ? {
-                ...current,
-                boardColumnId: column.id,
-                boardColumnTitle: column.title,
-                isCompleted: column.isCompletedColumn
-              }
-            : null
-        );
-      },
-      error: () => {
-        this.movingColumn.set(false);
-        this.refreshDetail(detail.id);
-        this.refreshBoardSilent();
-      }
-    });
-  }
-
-  private refreshDetail(taskId: number): void {
-    this.taskService.getTask(taskId).subscribe({
-      next: (detail) => this.detail.set(detail),
-      error: () => {}
-    });
-    this.loadTaskActivity(taskId);
-    this.loadTaskAttachments(taskId);
-    this.loadTaskComments(taskId);
-  }
-
-  private toDateInput(iso: string): string {
-    return iso ? iso.substring(0, 10) : '';
+  onCategoryCreated(category: Category): void {
+    this.categories.update((list) => [...list, category]);
   }
 
   // ---- Drag & drop ----
@@ -2060,28 +778,6 @@ export class TeamBoard implements OnInit {
     if (teamId !== null && sourceColumn) {
       void this.boardHub.notifyTaskDragStart(teamId, task.id, sourceColumn.id);
     }
-
-    if (!event.dataTransfer) {
-      return;
-    }
-
-    event.dataTransfer.effectAllowed = 'move';
-    event.dataTransfer.setData('text/plain', String(task.id));
-
-    const card = event.currentTarget as HTMLElement | null;
-    if (!card) {
-      return;
-    }
-
-    const ghost = card.cloneNode(true) as HTMLElement;
-    ghost.style.width = `${card.offsetWidth}px`;
-    ghost.style.position = 'absolute';
-    ghost.style.top = '-9999px';
-    ghost.style.left = '-9999px';
-    ghost.style.opacity = '0.95';
-    document.body.appendChild(ghost);
-    event.dataTransfer.setDragImage(ghost, card.offsetWidth / 2, 24);
-    requestAnimationFrame(() => ghost.remove());
   }
 
   onDragEnd(): void {
@@ -2130,55 +826,6 @@ export class TeamBoard implements OnInit {
     if (this.dragOverReorderColumnId() === columnId) {
       this.dragOverReorderColumnId.set(null);
     }
-  }
-
-  draggedTask(): TaskListItem | null {
-    const taskId = this.draggedTaskId();
-    if (taskId === null) {
-      return null;
-    }
-
-    for (const column of this.board()?.columns ?? []) {
-      const task = column.tasks.find((item) => item.id === taskId);
-      if (task) {
-        return task;
-      }
-    }
-
-    return null;
-  }
-
-  showTaskDropPreview(column: BoardColumnWithTasks): boolean {
-    const taskId = this.draggedTaskId();
-    const hoverColumnId = this.dragOverColumnId();
-    if (taskId === null || hoverColumnId === null || hoverColumnId !== column.id) {
-      return false;
-    }
-
-    return !column.tasks.some((task) => task.id === taskId);
-  }
-
-  remoteDropPreviews(columnId: number): RemoteTaskDrag[] {
-    return this.remoteTaskDrags().filter(
-      (drag) => drag.hoverColumnId === columnId && drag.hoverColumnId !== drag.sourceColumnId
-    );
-  }
-
-  isRemoteDraggingTask(taskId: number, columnId: number): boolean {
-    return this.remoteTaskDrags().some(
-      (drag) =>
-        drag.taskId === taskId &&
-        drag.sourceColumnId === columnId &&
-        drag.hoverColumnId !== columnId
-    );
-  }
-
-  remoteDragInPlace(taskId: number): RemoteTaskDrag | null {
-    return (
-      this.remoteTaskDrags().find(
-        (drag) => drag.taskId === taskId && drag.hoverColumnId === drag.sourceColumnId
-      ) ?? null
-    );
   }
 
   taskById(taskId: number): TaskListItem | null {
@@ -2330,92 +977,14 @@ export class TeamBoard implements OnInit {
 
   // ---- Members ----
   openMembersModal(): void {
-    this.memberForm.reset({ email: '', searchQuery: '' });
-    this.memberError.set(null);
-    this.memberSearchResults.set([]);
-    this.showMemberSearchResults.set(false);
     this.showMembersModal.set(true);
   }
 
   closeMembersModal(): void {
-    if (this.savingMember()) {
-      return;
-    }
     this.showMembersModal.set(false);
-    this.closeMemberSearchResults();
   }
 
-  onMemberSearchFocus(): void {
-    if (this.memberForm.controls.searchQuery.value.trim().length >= 3) {
-      this.showMemberSearchResults.set(true);
-    }
-  }
-
-  onMemberSearchInput(): void {
-    this.memberForm.controls.email.setValue('', { emitEvent: false });
-    this.memberError.set(null);
-  }
-
-  closeMemberSearchResults(): void {
-    this.showMemberSearchResults.set(false);
-  }
-
-  selectMemberFromSearch(user: UserSearchResult): void {
-    this.memberForm.patchValue(
-      {
-        email: user.email,
-        searchQuery: user.displayName
-      },
-      { emitEvent: false }
-    );
-    this.memberSearchResults.set([]);
-    this.showMemberSearchResults.set(false);
-    this.memberError.set(null);
-  }
-
-  submitMember(): void {
-    const id = this.teamId();
-    if (id === null || this.memberForm.invalid) {
-      this.memberForm.markAllAsTouched();
-      return;
-    }
-
-    this.savingMember.set(true);
-    this.memberError.set(null);
-
-    const { email } = this.memberForm.getRawValue();
-    this.teamService.addMember(id, { email: email.trim() }).subscribe({
-      next: () => {
-        this.savingMember.set(false);
-        this.memberForm.reset({ email: '', searchQuery: '' });
-        this.memberSearchResults.set([]);
-        this.showMemberSearchResults.set(false);
-        this.reloadTeam();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.savingMember.set(false);
-        this.memberError.set(err.error?.message ?? 'Üye eklenemedi.');
-      }
-    });
-  }
-
-  removeMember(userId: number): void {
-    const id = this.teamId();
-    if (id === null) {
-      return;
-    }
-
-    if (!confirm('Bu üye takımdan çıkarılsın mı?')) {
-      return;
-    }
-
-    this.teamService.removeMember(id, userId).subscribe({
-      next: () => this.reloadTeam(),
-      error: (err: HttpErrorResponse) => this.memberError.set(err.error?.message ?? 'Üye çıkarılamadı.')
-    });
-  }
-
-  private reloadTeam(): void {
+  reloadTeam(): void {
     const id = this.teamId();
     if (id === null) {
       return;
@@ -2458,33 +1027,7 @@ export class TeamBoard implements OnInit {
     });
   }
 
-  priorityLabel(priority: Priority): string {
-    return this.priorityOptions.find((p) => p.value === priority)?.label ?? '';
-  }
-
-  priorityClass(priority: Priority): string {
-    switch (priority) {
-      case Priority.Critical:
-        return 'critical';
-      case Priority.High:
-        return 'high';
-      case Priority.Medium:
-        return 'medium';
-      default:
-        return 'low';
-    }
-  }
-
-  initial(value: string): string {
-    return value.trim().charAt(0).toUpperCase() || '?';
-  }
-
   memberPhotoUrl(userId: number | null | undefined): string | null {
     return this.photoCache.photoUrl(userId);
-  }
-
-  memberName(member: TeamMember): string {
-    const full = [member.firstName, member.lastName].filter((part) => !!part && part.trim()).join(' ').trim();
-    return full || member.email;
   }
 }

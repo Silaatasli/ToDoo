@@ -1,0 +1,53 @@
+<article
+  class="task-card"
+  [class.completed]="task().isCompleted"
+  [class.pending-assignment]="pendingAssignment()"
+  [class.dragging]="dragging()"
+  [class.remote-dragging]="remoteDragging()"
+  draggable="true"
+  (dragstart)="onDragStart($event)"
+  (dragend)="dragEnd.emit()"
+  (click)="open.emit()"
+>
+  @if (remoteDragging() && remoteDragLabel()) {
+    <span class="remote-drag-badge">{{ remoteDragLabel() }} taşıyor</span>
+  }
+  @if (pendingAssignment()) {
+    <span class="assignment-pending-badge">Onay bekliyor</span>
+  }
+  <div class="task-top">
+    <span class="priority-badge" [class]="priorityClass(task().priority)">
+      {{ priorityLabel(task().priority) }}
+    </span>
+    <div class="task-menu">
+      <button type="button" class="task-action" (click)="onDeleteClick($event)" title="Sil">×</button>
+    </div>
+  </div>
+
+  <p class="task-title">{{ task().title }}</p>
+  @if (task().description) {
+    <p class="task-desc">{{ task().description }}</p>
+  }
+
+  <div class="task-meta">
+    @if (task().categoryName) {
+      <span class="task-category">{{ task().categoryName }}</span>
+    }
+    @if (task().dueDate) {
+      <span class="task-due">{{ task().dueDate | date: 'dd MMM' }}</span>
+    }
+    @if (task().assignedToUserId; as assigneeId) {
+      <span class="task-assignee" [class.has-photo]="!!photoUrl()" [title]="task().assignedToEmail || ''">
+        @if (photoUrl(); as p) {
+          <img [src]="p" [alt]="task().assignedToEmail || 'Atanan'" />
+        } @else {
+          {{ initial(task().assignedToEmail || '?') }}
+        }
+      </span>
+    } @else if (task().assignedToEmail) {
+      <span class="task-assignee" [title]="task().assignedToEmail!">
+        {{ initial(task().assignedToEmail!) }}
+      </span>
+    }
+  </div>
+</article>

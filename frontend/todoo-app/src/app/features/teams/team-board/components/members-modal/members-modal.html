@@ -1,0 +1,94 @@
+<div class="modal-backdrop" (click)="onClose()">
+  <section class="modal-card" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Takım üyeleri</h2>
+      <button type="button" class="icon-btn" (click)="onClose()" aria-label="Kapat">×</button>
+    </div>
+
+    <ul class="member-list">
+      @for (m of members(); track m.userId) {
+        <li class="member-row">
+          <a class="member-main" [routerLink]="['/profile', m.userId]" title="Profili gör">
+            <span class="member-avatar" [class.has-photo]="!!memberPhotoUrl(m.userId)">
+              @if (memberPhotoUrl(m.userId); as photoUrl) {
+                <img [src]="photoUrl" [alt]="memberName(m)" />
+              } @else {
+                {{ initial(memberName(m)) }}
+              }
+            </span>
+            <div class="member-info">
+              <span class="member-email">{{ memberName(m) }}</span>
+              @if (m.isLeader) {
+                <span class="badge">Lider</span>
+              }
+            </div>
+          </a>
+          @if (isLeader() && !m.isLeader) {
+            <button type="button" class="link-danger" (click)="removeMember(m.userId)">Çıkar</button>
+          }
+        </li>
+      }
+    </ul>
+
+    @if (isLeader()) {
+      <form [formGroup]="memberForm" (ngSubmit)="submitMember()" class="member-form">
+        <label class="field member-search-field">
+          <span>Üye ekle</span>
+          <div class="member-search" (click)="$event.stopPropagation()">
+            <div class="inline-add">
+              <input
+                type="search"
+                formControlName="searchQuery"
+                placeholder="Ad soyad ile ara (en az 3 harf)"
+                autocomplete="off"
+                (input)="onMemberSearchInput()"
+                (focus)="onMemberSearchFocus()"
+              />
+              <button
+                type="submit"
+                class="primary-btn"
+                [disabled]="savingMember() || memberForm.controls.email.invalid"
+              >
+                {{ savingMember() ? '...' : 'Ekle' }}
+              </button>
+            </div>
+
+            @if (showMemberSearchResults() && memberForm.controls.searchQuery.value.trim().length >= 3) {
+              <div class="member-search-results">
+                @if (memberSearchLoading()) {
+                  <p class="member-search-hint">Aranıyor...</p>
+                } @else if (memberSearchResults().length === 0) {
+                  <p class="member-search-hint">Eşleşen kullanıcı bulunamadı.</p>
+                } @else {
+                  <ul class="member-search-list">
+                    @for (user of memberSearchResults(); track user.id) {
+                      <li>
+                        <button type="button" class="member-search-option" (click)="selectMemberFromSearch(user)">
+                          <span class="member-avatar" [class.has-photo]="!!memberPhotoUrl(user.id)">
+                            @if (memberPhotoUrl(user.id); as photoUrl) {
+                              <img [src]="photoUrl" [alt]="user.displayName" />
+                            } @else {
+                              {{ initial(user.displayName) }}
+                            }
+                          </span>
+                          <span class="member-search-info">
+                            <span class="member-search-name">{{ user.displayName }}</span>
+                            <span class="member-search-email">{{ user.email }}</span>
+                          </span>
+                        </button>
+                      </li>
+                    }
+                  </ul>
+                }
+              </div>
+            }
+          </div>
+        </label>
+
+        @if (memberError()) {
+          <p class="error-box">{{ memberError() }}</p>
+        }
+      </form>
+    }
+  </section>
+</div>
