@@ -120,6 +120,32 @@
   line-height: 1.4;
 }
 
+.success-box {
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--auth-primary) 12%, transparent);
+  color: var(--auth-primary);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.forgot-link {
+  margin: -0.35rem 0 0;
+  text-align: right;
+  font-size: 0.875rem;
+
+  a {
+    color: var(--auth-primary);
+    text-decoration: none;
+    font-weight: 600;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
 .submit-btn {
   margin-top: 0.35rem;
   width: 100%;

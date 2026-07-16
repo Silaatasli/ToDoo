@@ -67,6 +67,32 @@ public class AuthController : ControllerBase
         return Ok(result);
     }
 
+    [EnableRateLimiting("AuthForgotPassword")]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto request)
+    {
+        var result = await _authService.ForgotPasswordAsync(request.Email);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
+    [EnableRateLimiting("AuthForgotPassword")]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto request)
+    {
+        var result = await _authService.ResetPasswordAsync(request.Token, request.NewPassword);
+        if (!result.Success)
+        {
+            return BadRequest(result);
+        }
+
+        return Ok(result);
+    }
+
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshRequestDto request)
     {

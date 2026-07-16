@@ -29,6 +29,8 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptio
 builder.Services.Configure<MinioOptions>(builder.Configuration.GetSection(MinioOptions.SectionName));
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<AuthRateLimitOptions>(builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(PasswordResetOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt ayarlari bulunamadi.");
@@ -129,6 +131,17 @@ builder.Services.AddRateLimiter(options =>
                 QueueLimit = 0,
                 AutoReplenishment = true
             }));
+
+    options.AddPolicy("AuthForgotPassword", httpContext =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: GetRateLimitKey(httpContext),
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = authRateLimitOptions.ForgotPasswordPermitLimit,
+                Window = TimeSpan.FromSeconds(authRateLimitOptions.ForgotPasswordWindowSeconds),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            }));
 });
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ITeamBoardNotifier, TeamBoardNotifier>();
@@ -140,6 +153,8 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     return ConnectionMultiplexer.Connect(configuration);
 });
 builder.Services.AddScoped<IRefreshTokenService, RedisRefreshTokenService>();
+builder.Services.AddScoped<IPasswordResetTokenService, RedisPasswordResetTokenService>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.Configure<LuceneSearchOptions>(options =>
 {
     options.IndexPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "lucene-index");

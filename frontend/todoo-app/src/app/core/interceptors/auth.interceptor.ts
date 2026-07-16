@@ -9,7 +9,13 @@ import { AuthService } from '../services/auth.service';
 let isRefreshing = false;
 const refreshedToken$ = new BehaviorSubject<string | null>(null);
 
-const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh'];
+const AUTH_ENDPOINTS = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/refresh',
+  '/auth/forgot-password',
+  '/auth/reset-password'
+];
 
 export const authInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);

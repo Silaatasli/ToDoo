@@ -15,4 +15,8 @@ public class AuthRateLimitOptions
     public int RefreshPermitLimit { get; set; } = 20;
 
     public int RefreshWindowSeconds { get; set; } = 60;
+
+    public int ForgotPasswordPermitLimit { get; set; } = 3;
+
+    public int ForgotPasswordWindowSeconds { get; set; } = 300;
 }

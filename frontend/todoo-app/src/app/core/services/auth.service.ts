@@ -24,6 +24,14 @@ export class AuthService {
       .pipe(tap((result) => this.persistSession(result)));
   }
 
+  forgotPassword(email: string): Observable<AuthResult> {
+    return this.http.post<AuthResult>(`${environment.apiUrl}/auth/forgot-password`, { email });
+  }
+
+  resetPassword(token: string, newPassword: string): Observable<AuthResult> {
+    return this.http.post<AuthResult>(`${environment.apiUrl}/auth/reset-password`, { token, newPassword });
+  }
+
   /**
    * Refresh token ile yeni bir access token alir. Basarili olursa oturumu
    * (access + rotate edilmis refresh token) gunceller.
