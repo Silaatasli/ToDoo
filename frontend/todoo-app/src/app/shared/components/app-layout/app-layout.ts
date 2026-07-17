@@ -66,7 +66,7 @@ export class AppLayout implements OnInit {
   readonly displayName = computed(() => {
     const p = this.profile();
     const full = [p?.firstName, p?.lastName].filter((part) => !!part && part.trim()).join(' ').trim();
-    return full || this.user?.email || '';
+    return full || 'Kullanıcı';
   });
 
   readonly photoUrl = computed(() => {

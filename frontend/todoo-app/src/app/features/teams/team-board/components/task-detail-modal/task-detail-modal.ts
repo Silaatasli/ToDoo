@@ -9,7 +9,8 @@ import {
   inject,
   input,
   output,
-  signal
+  signal,
+  untracked
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
@@ -142,10 +143,19 @@ export class TaskDetailModalComponent {
   readonly initial = initial;
   readonly memberName = memberName;
 
+  private backdropCloseArmed = false;
+
   constructor() {
     effect(() => {
       const id = this.taskId();
-      this.loadTask(id);
+      // Side-effect writes must stay untracked so the effect does not re-run
+      // on every detail/loading signal update (can freeze the UI in zoneless mode).
+      untracked(() => this.loadTask(id));
+    });
+
+    // Arm backdrop close after the opening click has fully finished.
+    queueMicrotask(() => {
+      this.backdropCloseArmed = true;
     });
 
     this.boardHub.boardChanged$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((event) => {
@@ -242,7 +252,7 @@ export class TaskDetailModalComponent {
   }
 
   close(): void {
-    if (this.savingDetail()) {
+    if (!this.backdropCloseArmed || this.savingDetail()) {
       return;
     }
     this.closed.emit();

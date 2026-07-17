@@ -737,7 +737,10 @@ export class TeamBoard implements OnInit {
 
   // ---- Task detail ----
   openTaskDetail(task: TaskListItem): void {
-    this.openTaskId.set(task.id);
+    // Defer open until after the originating click finishes. In zoneless Angular,
+    // opening the modal synchronously can make the same click hit the backdrop and
+    // immediately close it (or thrash open/close and freeze the page).
+    queueMicrotask(() => this.openTaskId.set(task.id));
   }
 
   private tryOpenPendingTask(): void {
@@ -747,7 +750,7 @@ export class TeamBoard implements OnInit {
     }
 
     this.pendingOpenTaskId = null;
-    this.openTaskId.set(taskId);
+    queueMicrotask(() => this.openTaskId.set(taskId));
     void this.router.navigate([], {
       relativeTo: this.route,
       queryParams: {},

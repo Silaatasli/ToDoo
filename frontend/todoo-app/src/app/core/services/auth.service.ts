@@ -3,10 +3,10 @@ import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, of, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { AuthResult, AuthUser } from '../../models/auth.model';
+import { getUserIdFromToken } from '../utils/jwt.utils';
 
 const TOKEN_KEY = 'todoo_token';
 const REFRESH_TOKEN_KEY = 'todoo_refresh_token';
-const USER_KEY = 'todoo_user';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -58,7 +58,7 @@ export class AuthService {
 
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(REFRESH_TOKEN_KEY);
-    sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem('todoo_user');
 
     if (refreshToken) {
       this.http
@@ -77,16 +77,17 @@ export class AuthService {
   }
 
   getUser(): AuthUser | null {
-    const raw = sessionStorage.getItem(USER_KEY);
-    if (!raw) {
+    const token = this.getToken();
+    if (!token) {
       return null;
     }
 
-    try {
-      return JSON.parse(raw) as AuthUser;
-    } catch {
-      return null;
-    }
+    const userId = getUserIdFromToken(token);
+    return userId == null ? null : { userId };
+  }
+
+  getUserId(): number | null {
+    return this.getUser()?.userId ?? null;
   }
 
   isLoggedIn(): boolean {
@@ -94,15 +95,12 @@ export class AuthService {
   }
 
   private persistSession(result: AuthResult): void {
-    if (!result.success || !result.token || !result.userId || !result.email) {
+    if (!result.success || !result.token) {
       return;
     }
 
     sessionStorage.setItem(TOKEN_KEY, result.token);
-    sessionStorage.setItem(
-      USER_KEY,
-      JSON.stringify({ userId: result.userId, email: result.email } satisfies AuthUser)
-    );
+    sessionStorage.removeItem('todoo_user');
 
     if (result.refreshToken) {
       sessionStorage.setItem(REFRESH_TOKEN_KEY, result.refreshToken);

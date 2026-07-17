@@ -16,6 +16,7 @@ public class AuthService : IAuthService
     private readonly IJwtTokenService _jwtTokenService;
     private readonly ITeamService _teamService;
     private readonly IRefreshTokenService _refreshTokenService;
+    private readonly IAccessTokenService _accessTokenService;
     private readonly IPasswordResetTokenService _passwordResetTokenService;
     private readonly IEmailService _emailService;
     private readonly PasswordResetOptions _passwordResetOptions;
@@ -27,6 +28,7 @@ public class AuthService : IAuthService
         IJwtTokenService jwtTokenService,
         ITeamService teamService,
         IRefreshTokenService refreshTokenService,
+        IAccessTokenService accessTokenService,
         IPasswordResetTokenService passwordResetTokenService,
         IEmailService emailService,
         IOptions<PasswordResetOptions> passwordResetOptions,
@@ -37,10 +39,21 @@ public class AuthService : IAuthService
         _jwtTokenService = jwtTokenService;
         _teamService = teamService;
         _refreshTokenService = refreshTokenService;
+        _accessTokenService = accessTokenService;
         _passwordResetTokenService = passwordResetTokenService;
         _emailService = emailService;
         _passwordResetOptions = passwordResetOptions.Value;
         _logger = logger;
+    }
+
+    /// <summary>
+    /// Access token (JWT) uretir: once Redis'te bir jti olusturulur, sonra bu jti token'a gomulur.
+    /// Boylece uretilen her access token Redis allowlist'inde takip edilebilir.
+    /// </summary>
+    private async Task<string> CreateAccessTokenAsync(int userId)
+    {
+        var jti = await _accessTokenService.IssueAsync(userId);
+        return _jwtTokenService.CreateToken(userId, jti);
     }
 
     public async Task<AuthResultDto> RegisterAsync(string firstName, string lastName, string email, string password)
@@ -93,7 +106,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
-            Token = _jwtTokenService.CreateToken(user.Id, user.Email),
+            Token = await CreateAccessTokenAsync(user.Id),
             RefreshToken = await _refreshTokenService.IssueAsync(user.Id, user.Email)
         };
     }
@@ -121,7 +134,7 @@ public class AuthService : IAuthService
             Email = user.Email,
             FirstName = user.FirstName,
             LastName = user.LastName,
-            Token = _jwtTokenService.CreateToken(user.Id, user.Email),
+            Token = await CreateAccessTokenAsync(user.Id),
             RefreshToken = await _refreshTokenService.IssueAsync(user.Id, user.Email)
         };
     }
@@ -153,13 +166,18 @@ public class AuthService : IAuthService
             Message = "Token yenilendi.",
             UserId = rotation.UserId,
             Email = rotation.Email,
-            Token = _jwtTokenService.CreateToken(rotation.UserId, rotation.Email),
+            Token = await CreateAccessTokenAsync(rotation.UserId),
             RefreshToken = rotation.NewRefreshToken
         };
     }
 
-    public async Task LogoutAsync(string refreshToken)
+    public async Task LogoutAsync(string refreshToken, string? accessTokenJti)
     {
+        if (!string.IsNullOrWhiteSpace(accessTokenJti))
+        {
+            await _accessTokenService.RevokeAsync(accessTokenJti);
+        }
+
         if (string.IsNullOrWhiteSpace(refreshToken))
         {
             return;
@@ -171,6 +189,7 @@ public class AuthService : IAuthService
     public async Task LogoutAllAsync(int userId)
     {
         await _refreshTokenService.RevokeAllForUserAsync(userId);
+        await _accessTokenService.RevokeAllForUserAsync(userId);
     }
 
     public async Task<AuthResultDto> ForgotPasswordAsync(string email)
@@ -270,6 +289,7 @@ public class AuthService : IAuthService
         await _unitOfWork.SaveChangesAsync();
 
         await _refreshTokenService.RevokeAllForUserAsync(user.Id);
+        await _accessTokenService.RevokeAllForUserAsync(user.Id);
 
         return new AuthResultDto
         {

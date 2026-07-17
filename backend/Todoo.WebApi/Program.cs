@@ -1,9 +1,11 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Text;
 using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
 using StackExchange.Redis;
 using Todoo.Business.Abstract;
@@ -81,6 +83,33 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 }
 
                 return Task.CompletedTask;
+            },
+
+            // JWT imza + sure dogrulamasi gectikten sonra, token'in jti'si Redis
+            // allowlist'inde hala aktif mi diye kontrol edilir. Logout / sifre sifirlama
+            // sonrasi Redis'ten silinen token'lar boylece aninda gecersiz sayilir.
+            OnTokenValidated = async context =>
+            {
+                var accessTokenService = context.HttpContext.RequestServices
+                    .GetRequiredService<IAccessTokenService>();
+
+                // jti, claim mapping'den bagimsiz olmak icin dogrudan token'in Id alanindan okunur.
+                var jti = context.SecurityToken switch
+                {
+                    JsonWebToken jwt => jwt.Id,
+                    JwtSecurityToken legacy => legacy.Id,
+                    _ => null
+                };
+
+                if (string.IsNullOrEmpty(jti))
+                {
+                    jti = context.Principal?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Jti)?.Value;
+                }
+
+                if (string.IsNullOrEmpty(jti) || !await accessTokenService.IsActiveAsync(jti))
+                {
+                    context.Fail("Access token gecersiz veya iptal edilmis.");
+                }
             }
         };
     });
@@ -153,6 +182,7 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
     return ConnectionMultiplexer.Connect(configuration);
 });
 builder.Services.AddScoped<IRefreshTokenService, RedisRefreshTokenService>();
+builder.Services.AddScoped<IAccessTokenService, RedisAccessTokenService>();
 builder.Services.AddScoped<IPasswordResetTokenService, RedisPasswordResetTokenService>();
 builder.Services.AddScoped<IEmailService, SmtpEmailService>();
 builder.Services.Configure<LuceneSearchOptions>(options =>

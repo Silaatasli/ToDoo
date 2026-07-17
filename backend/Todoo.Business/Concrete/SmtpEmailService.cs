@@ -26,7 +26,7 @@ public class SmtpEmailService : IEmailService
             || string.IsNullOrWhiteSpace(_options.Password))
         {
             throw new InvalidOperationException(
-                "SMTP ayarlari eksik. appsettings.Development.json icinde Smtp.Username ve Smtp.Password degerlerini doldurun.");
+                "SMTP ayarlari eksik.");
         }
 
         var fromEmail = string.IsNullOrWhiteSpace(_options.FromEmail) ? _options.Username : _options.FromEmail;

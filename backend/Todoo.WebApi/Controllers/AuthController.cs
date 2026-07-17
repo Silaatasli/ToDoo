@@ -1,3 +1,4 @@
+using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -96,7 +97,8 @@ public class AuthController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout([FromBody] RefreshRequestDto request)
     {
-        await _authService.LogoutAsync(request.RefreshToken);
+        var jti = User.FindFirst(JwtRegisteredClaimNames.Jti)?.Value;
+        await _authService.LogoutAsync(request.RefreshToken, jti);
         return Ok(new { success = true, message = "Cikis yapildi." });
     }
 

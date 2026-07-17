@@ -7,7 +7,7 @@
   draggable="true"
   (dragstart)="onDragStart($event)"
   (dragend)="dragEnd.emit()"
-  (click)="open.emit()"
+  (click)="$event.stopPropagation(); open.emit()"
 >
   @if (remoteDragging() && remoteDragLabel()) {
     <span class="remote-drag-badge">{{ remoteDragLabel() }} taşıyor</span>

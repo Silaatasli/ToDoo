@@ -334,7 +334,7 @@
                     </div>
                   </div>
                 </div>
-                @if (comment.replies.length > 0) {
+                @if ((comment.replies?.length ?? 0) > 0) {
                   <div class="comment-replies">
                     @for (reply of comment.replies; track reply.id) {
                       <ng-container *ngTemplateOutlet="commentNode; context: { $implicit: reply, depth: depth + 1 }"></ng-container>
