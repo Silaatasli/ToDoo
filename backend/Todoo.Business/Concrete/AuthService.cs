@@ -219,6 +219,7 @@ public class AuthService : IAuthService
             <p><a href="{resetUrl}">Şifreni sıfırlamak için buraya tıkla</a></p>
             <p>Bu link {_passwordResetOptions.TokenExpirationMinutes} dakika geçerlidir.</p>
             <p>Bu isteği sen yapmadıysan bu e-postayı yok sayabilirsin.</p>
+            <p><em>Bu otomatik bir e-postadır, lütfen yanıtlamayın.</em></p>
             """;
 
         try

@@ -31,7 +31,7 @@ builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptio
 builder.Services.Configure<MinioOptions>(builder.Configuration.GetSection(MinioOptions.SectionName));
 builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisOptions.SectionName));
 builder.Services.Configure<AuthRateLimitOptions>(builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
-builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
+builder.Services.Configure<SendGridOptions>(builder.Configuration.GetSection(SendGridOptions.SectionName));
 builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(PasswordResetOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
@@ -184,7 +184,12 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 builder.Services.AddScoped<IRefreshTokenService, RedisRefreshTokenService>();
 builder.Services.AddScoped<IAccessTokenService, RedisAccessTokenService>();
 builder.Services.AddScoped<IPasswordResetTokenService, RedisPasswordResetTokenService>();
-builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+var sendGridOptions = builder.Configuration.GetSection(SendGridOptions.SectionName).Get<SendGridOptions>()
+    ?? new SendGridOptions();
+builder.Services.AddHttpClient<IEmailService, SendGridEmailService>(client =>
+{
+    client.BaseAddress = new Uri(sendGridOptions.ApiBaseUrl);
+});
 builder.Services.Configure<LuceneSearchOptions>(options =>
 {
     options.IndexPath = Path.Combine(builder.Environment.ContentRootPath, "App_Data", "lucene-index");
