@@ -16,12 +16,18 @@ public class TeamService : ITeamService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITeamBoardNotifier _boardNotifier;
     private readonly ILuceneSearchIndex _searchIndex;
+    private readonly NotificationDispatchService _notificationDispatch;
 
-    public TeamService(IUnitOfWork unitOfWork, ITeamBoardNotifier boardNotifier, ILuceneSearchIndex searchIndex)
+    public TeamService(
+        IUnitOfWork unitOfWork,
+        ITeamBoardNotifier boardNotifier,
+        ILuceneSearchIndex searchIndex,
+        NotificationDispatchService notificationDispatch)
     {
         _unitOfWork = unitOfWork;
         _boardNotifier = boardNotifier;
         _searchIndex = searchIndex;
+        _notificationDispatch = notificationDispatch;
     }
 
     public async Task<ServiceResult<TeamDetailDto>> CreateTeamAsync(
@@ -561,6 +567,16 @@ public class TeamService : ITeamService
 
         await _unitOfWork.SaveChangesAsync();
         await IndexPersonDocumentAsync(newMember.Id);
+
+        var actor = await _unitOfWork.Users.GetByIdAsync(userId);
+        var actorName = actor is null ? string.Empty : UserDisplayNameHelper.Format(actor);
+        await _notificationDispatch.NotifyTeamMemberAddedAsync(
+            newMember.Id,
+            userId,
+            teamId,
+            team.Name,
+            actorName);
+
         return ServiceResult.Ok();
     }
 

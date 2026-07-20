@@ -28,7 +28,8 @@ public class CreateTeamTaskRequestDto : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (DueDate.HasValue && DueDate.Value < StartDate)
+        // Date picker gun bazli; ayni gun bitis tarihi gecerli sayilir.
+        if (DueDate.HasValue && DueDate.Value.Date < StartDate.Date)
         {
             yield return new ValidationResult(
                 "Bitis tarihi baslangic tarihinden once olamaz.",

@@ -24,7 +24,7 @@ public class UpdateTeamTaskRequestDto : IValidatableObject
 
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (DueDate.HasValue && DueDate.Value < StartDate)
+        if (DueDate.HasValue && DueDate.Value.Date < StartDate.Date)
         {
             yield return new ValidationResult(
                 "Bitis tarihi baslangic tarihinden once olamaz.",

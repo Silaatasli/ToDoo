@@ -1,9 +1,11 @@
-import { Component, computed, DestroyRef, HostListener, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, DestroyRef, HostListener, inject, OnDestroy, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { catchError, debounceTime, distinctUntilChanged, of, switchMap } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
+import { NotificationHubService } from '../../../core/services/notification-hub.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
 import { RecentItemsService } from '../../../core/services/recent-items.service';
 import { SearchService } from '../../../core/services/search.service';
@@ -17,6 +19,7 @@ import {
   GlobalSearchTask,
   GlobalSearchTeam
 } from '../../../models/search.model';
+import { AppNotification } from '../../../models/notification.model';
 import { RecentItem } from '../../../models/recent-item.model';
 import { TeamListItem } from '../../../models/team.model';
 import { UserProfile } from '../../../models/user.model';
@@ -35,7 +38,7 @@ type SearchNavItem =
   templateUrl: './app-layout.html',
   styleUrl: './app-layout.scss'
 })
-export class AppLayout implements OnInit {
+export class AppLayout implements OnInit, OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly teamService = inject(TeamService);
   private readonly userService = inject(UserService);
@@ -43,6 +46,8 @@ export class AppLayout implements OnInit {
   private readonly recentStore = inject(RecentItemsService);
   private readonly themeService = inject(ThemeService);
   private readonly photoCache = inject(ProfilePhotoCacheService);
+  private readonly notificationService = inject(NotificationService);
+  private readonly notificationHub = inject(NotificationHubService);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -51,6 +56,11 @@ export class AppLayout implements OnInit {
   readonly collapsed = signal<boolean>(localStorage.getItem(SIDEBAR_KEY) === '1');
   readonly profile = signal<UserProfile | null>(null);
   readonly theme = this.themeService.theme;
+
+  readonly notifications = this.notificationService.items;
+  readonly unreadCount = this.notificationService.unreadCount;
+  readonly toasts = this.notificationService.toasts;
+  readonly notifOpen = signal(false);
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly searchOpen = signal(false);
@@ -62,6 +72,13 @@ export class AppLayout implements OnInit {
   readonly recentOpen = signal(false);
   readonly recentItems = this.recentStore.items;
   private recentCloseTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private readonly onBrowserNotificationClick = (event: Event): void => {
+    const custom = event as CustomEvent<AppNotification>;
+    if (custom.detail) {
+      this.openNotification(custom.detail, new Event('click'));
+    }
+  };
 
   readonly displayName = computed(() => {
     const p = this.profile();
@@ -103,6 +120,9 @@ export class AppLayout implements OnInit {
 
   ngOnInit(): void {
     this.recentStore.load();
+    this.notificationService.load();
+    void this.notificationHub.connect();
+    window.addEventListener('todoo-notification-click', this.onBrowserNotificationClick);
 
     this.teamService.getTeams().subscribe({
       next: (teams) => this.teams.set(teams),
@@ -153,10 +173,16 @@ export class AppLayout implements OnInit {
       });
   }
 
+  ngOnDestroy(): void {
+    window.removeEventListener('todoo-notification-click', this.onBrowserNotificationClick);
+    void this.notificationHub.disconnect();
+  }
+
   @HostListener('document:click')
   onDocumentClick(): void {
     this.searchOpen.set(false);
     this.recentOpen.set(false);
+    this.notifOpen.set(false);
   }
 
   openSearch(event: Event): void {
@@ -219,6 +245,66 @@ export class AppLayout implements OnInit {
     this.themeService.toggle();
   }
 
+  toggleNotifications(event: Event): void {
+    event.stopPropagation();
+    this.notifOpen.update((open) => !open);
+    this.searchOpen.set(false);
+    this.recentOpen.set(false);
+  }
+
+  markAllNotificationsRead(event: Event): void {
+    event.stopPropagation();
+    this.notificationService.markAllRead().subscribe();
+  }
+
+  openNotification(item: AppNotification, event: Event): void {
+    event.stopPropagation();
+    this.notifOpen.set(false);
+    this.notificationService.dismissToast(item.id);
+
+    if (!item.isRead) {
+      this.notificationService.markRead(item.id).subscribe();
+    }
+
+    if (item.teamId && item.boardId && item.taskId) {
+      void this.router.navigate(['/teams', item.teamId, 'boards', item.boardId], {
+        queryParams: { taskId: item.taskId }
+      });
+      return;
+    }
+
+    if (item.teamId && item.boardId) {
+      void this.router.navigate(['/teams', item.teamId, 'boards', item.boardId]);
+      return;
+    }
+
+    if (item.teamId) {
+      void this.router.navigate(['/teams', item.teamId, 'board']);
+    }
+  }
+
+  dismissToast(item: AppNotification, event: Event): void {
+    event.stopPropagation();
+    this.notificationService.dismissToast(item.id);
+  }
+
+  notificationTypeLabel(type: string): string {
+    switch (type) {
+      case 'TaskAssigned':
+        return 'Görev';
+      case 'CommentReply':
+        return 'Yanıt';
+      case 'TeamMemberAdded':
+        return 'Takım';
+      case 'Announcement':
+        return 'Duyuru';
+      case 'Mention':
+        return 'Bahsetme';
+      default:
+        return 'Bildirim';
+    }
+  }
+
   onRecentEnter(): void {
     if (this.recentCloseTimer) {
       clearTimeout(this.recentCloseTimer);
@@ -253,6 +339,7 @@ export class AppLayout implements OnInit {
   }
 
   logout(): void {
+    void this.notificationHub.disconnect();
     this.auth.logout();
     void this.router.navigate(['/login']);
   }

@@ -16,6 +16,7 @@ public class TaskService : ITaskService
     private readonly ITeamBoardNotifier _boardNotifier;
     private readonly IFileStorageService _fileStorage;
     private readonly ILuceneSearchIndex _searchIndex;
+    private readonly NotificationDispatchService _notificationDispatch;
 
     public TaskService(
         IUnitOfWork unitOfWork,
@@ -23,7 +24,8 @@ public class TaskService : ITaskService
         ITeamService teamService,
         ITeamBoardNotifier boardNotifier,
         IFileStorageService fileStorage,
-        ILuceneSearchIndex searchIndex)
+        ILuceneSearchIndex searchIndex,
+        NotificationDispatchService notificationDispatch)
     {
         _unitOfWork = unitOfWork;
         _categoryService = categoryService;
@@ -31,6 +33,7 @@ public class TaskService : ITaskService
         _boardNotifier = boardNotifier;
         _fileStorage = fileStorage;
         _searchIndex = searchIndex;
+        _notificationDispatch = notificationDispatch;
     }
 
     public async Task<ServiceResult<TaskDetailDto>> GetTaskDetailAsync(int taskId, int userId)
@@ -162,6 +165,13 @@ public class TaskService : ITaskService
             var assignee = await _unitOfWork.Users.GetByIdAsync(assignedToUserId.Value);
             var assigneeName = assignee is null ? null : UserDisplayNameHelper.Format(assignee);
             await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.Assigned, null, assigneeName);
+            await _notificationDispatch.NotifyTaskAssignedAsync(
+                assignedToUserId.Value,
+                userId,
+                task.TeamId,
+                task.BoardId,
+                task.Id,
+                task.Title);
         }
 
         await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskCreated, userId, task.Id, boardId);
@@ -305,6 +315,17 @@ public class TaskService : ITaskService
 
         await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.Assigned, oldAssigneeName, newAssigneeName);
         await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskAssigned, userId, task.Id, task.BoardId);
+
+        if (assignedToUserId.HasValue)
+        {
+            await _notificationDispatch.NotifyTaskAssignedAsync(
+                assignedToUserId.Value,
+                userId,
+                task.TeamId,
+                task.BoardId,
+                task.Id,
+                task.Title);
+        }
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }

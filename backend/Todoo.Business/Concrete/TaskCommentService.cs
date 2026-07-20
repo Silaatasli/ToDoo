@@ -25,17 +25,20 @@ public class TaskCommentService : ITaskCommentService
     private readonly ITeamService _teamService;
     private readonly IFileStorageService _fileStorage;
     private readonly ITeamBoardNotifier _boardNotifier;
+    private readonly NotificationDispatchService _notificationDispatch;
 
     public TaskCommentService(
         IUnitOfWork unitOfWork,
         ITeamService teamService,
         IFileStorageService fileStorage,
-        ITeamBoardNotifier boardNotifier)
+        ITeamBoardNotifier boardNotifier,
+        NotificationDispatchService notificationDispatch)
     {
         _unitOfWork = unitOfWork;
         _teamService = teamService;
         _fileStorage = fileStorage;
         _boardNotifier = boardNotifier;
+        _notificationDispatch = notificationDispatch;
     }
 
     public async Task<ServiceResult<IEnumerable<TaskCommentDto>>> ListAsync(int taskId, int userId) // thread yapısı
@@ -89,6 +92,7 @@ public class TaskCommentService : ITaskCommentService
             return ServiceResult<TaskCommentDto>.Fail("Yorum en fazla 4000 karakter olabilir.");
         }
 
+        int? parentAuthorUserId = null;
         if (parentCommentId.HasValue)
         {
             var parent = await _unitOfWork.TaskComments.GetByIdAsync(parentCommentId.Value);
@@ -96,6 +100,8 @@ public class TaskCommentService : ITaskCommentService
             {
                 return ServiceResult<TaskCommentDto>.Fail("Yanit verilecek yorum bulunamadi.", ServiceErrorKind.NotFound);
             }
+
+            parentAuthorUserId = parent.AuthorUserId;
         }
 
         var task = taskResult.Data!;
@@ -113,6 +119,18 @@ public class TaskCommentService : ITaskCommentService
         var preview = trimmedBody.Length > 120 ? $"{trimmedBody[..120]}..." : trimmedBody;
         await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.CommentAdded, null, preview);
         await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskUpdated, userId, task.Id);
+
+        if (parentAuthorUserId.HasValue)
+        {
+            await _notificationDispatch.NotifyCommentReplyAsync(
+                parentAuthorUserId.Value,
+                userId,
+                task.TeamId,
+                task.BoardId,
+                task.Id,
+                task.Title,
+                preview);
+        }
 
         var author = await _unitOfWork.Users.GetByIdAsync(userId);
         return ServiceResult<TaskCommentDto>.Ok(MapToDto(comment, author?.Email ?? string.Empty));

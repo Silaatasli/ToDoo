@@ -274,6 +274,58 @@
       </div>
 
       <div class="header-actions">
+        <div class="notif-wrap" (click)="$event.stopPropagation()">
+          <button
+            type="button"
+            class="notif-toggle"
+            (click)="toggleNotifications($event)"
+            aria-label="Bildirimler"
+            title="Bildirimler"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+            </svg>
+            @if (unreadCount() > 0) {
+              <span class="notif-badge">{{ unreadCount() > 99 ? '99+' : unreadCount() }}</span>
+            }
+          </button>
+
+          @if (notifOpen()) {
+            <div class="notif-panel">
+              <div class="notif-panel-head">
+                <strong>Bildirimler</strong>
+                @if (unreadCount() > 0) {
+                  <button type="button" class="notif-mark-all" (click)="markAllNotificationsRead($event)">
+                    Tümünü okundu
+                  </button>
+                }
+              </div>
+
+              @if (notifications().length === 0) {
+                <p class="notif-empty">Henüz bildirim yok.</p>
+              } @else {
+                <ul class="notif-list">
+                  @for (item of notifications(); track item.id) {
+                    <li>
+                      <button
+                        type="button"
+                        class="notif-item"
+                        [class.unread]="!item.isRead"
+                        (click)="openNotification(item, $event)"
+                      >
+                        <span class="notif-item-type">{{ notificationTypeLabel(item.type) }}</span>
+                        <strong>{{ item.title }}</strong>
+                        <span>{{ item.body }}</span>
+                      </button>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
+        </div>
+
         <button
           type="button"
           class="theme-toggle"
@@ -309,5 +361,23 @@
     <div class="main-content">
       <ng-content />
     </div>
+  </div>
+
+  <div class="toast-stack" aria-live="polite">
+    @for (toast of toasts(); track toast.id) {
+      <button type="button" class="toast-card" (click)="openNotification(toast, $event)">
+        <div class="toast-head">
+          <strong>{{ toast.title }}</strong>
+          <span
+            class="toast-close"
+            role="button"
+            tabindex="0"
+            (click)="dismissToast(toast, $event)"
+            (keydown.enter)="dismissToast(toast, $event)"
+          >×</span>
+        </div>
+        <p>{{ toast.body }}</p>
+      </button>
+    }
   </div>
 </div>

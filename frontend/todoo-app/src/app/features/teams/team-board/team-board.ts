@@ -696,7 +696,8 @@ export class TeamBoard implements OnInit {
         categoryId: payload.categoryId,
         priority: payload.priority as Priority,
         startDate: new Date().toISOString(),
-        dueDate: payload.dueDate ? new Date(payload.dueDate).toISOString() : null,
+        // date input gun basina gelir; gunun sonuna cek ki "bugun" StartDate'ten once dusmesin
+        dueDate: payload.dueDate ? this.toEndOfDayIso(payload.dueDate) : null,
         boardColumnId: columnId,
         assignedToUserId: payload.assignedToUserId
       })
@@ -1032,5 +1033,11 @@ export class TeamBoard implements OnInit {
 
   memberPhotoUrl(userId: number | null | undefined): string | null {
     return this.photoCache.photoUrl(userId);
+  }
+
+  private toEndOfDayIso(dateValue: string): string {
+    const date = new Date(dateValue);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
   }
 }

@@ -33,6 +33,8 @@ builder.Services.Configure<RedisOptions>(builder.Configuration.GetSection(RedisO
 builder.Services.Configure<AuthRateLimitOptions>(builder.Configuration.GetSection(AuthRateLimitOptions.SectionName));
 builder.Services.Configure<SendGridOptions>(builder.Configuration.GetSection(SendGridOptions.SectionName));
 builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(PasswordResetOptions.SectionName));
+builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection(RabbitMqOptions.SectionName));
+builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection(NotificationOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt ayarlari bulunamadi.");
@@ -174,6 +176,7 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<ITeamBoardNotifier, TeamBoardNotifier>();
+builder.Services.AddSingleton<IRealtimeNotificationSender, RealtimeNotificationSender>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 {
@@ -184,6 +187,10 @@ builder.Services.AddSingleton<IConnectionMultiplexer>(_ =>
 builder.Services.AddScoped<IRefreshTokenService, RedisRefreshTokenService>();
 builder.Services.AddScoped<IAccessTokenService, RedisAccessTokenService>();
 builder.Services.AddScoped<IPasswordResetTokenService, RedisPasswordResetTokenService>();
+builder.Services.AddSingleton<INotificationPublisher, RabbitMqNotificationPublisher>();
+builder.Services.AddScoped<INotificationStore, RedisNotificationStore>();
+builder.Services.AddScoped<NotificationDispatchService>();
+builder.Services.AddHostedService<NotificationConsumerHostedService>();
 var sendGridOptions = builder.Configuration.GetSection(SendGridOptions.SectionName).Get<SendGridOptions>()
     ?? new SendGridOptions();
 builder.Services.AddHttpClient<IEmailService, SendGridEmailService>(client =>
@@ -239,6 +246,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 app.MapHub<TeamBoardHub>("/hubs/team-board");
+app.MapHub<NotificationHub>("/hubs/notifications");
 app.Run();
 
 static string GetRateLimitKey(HttpContext context)

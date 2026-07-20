@@ -1090,7 +1090,7 @@ export class TaskDetailModalComponent {
         categoryId: raw.categoryId ? Number(raw.categoryId) : null,
         priority: Number(raw.priority) as Priority,
         startDate: new Date(raw.startDate).toISOString(),
-        dueDate: raw.dueDate ? new Date(raw.dueDate).toISOString() : null
+        dueDate: raw.dueDate ? this.toEndOfDayIso(raw.dueDate) : null
       })
       .subscribe({
         next: () => {
@@ -1240,5 +1240,11 @@ export class TaskDetailModalComponent {
 
   private toDateInput(iso: string): string {
     return iso ? iso.substring(0, 10) : '';
+  }
+
+  private toEndOfDayIso(dateValue: string): string {
+    const date = new Date(dateValue);
+    date.setHours(23, 59, 59, 999);
+    return date.toISOString();
   }
 }

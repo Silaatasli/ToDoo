@@ -531,6 +531,210 @@
   flex-shrink: 0;
 }
 
+.notif-wrap {
+  position: relative;
+}
+
+.notif-toggle {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+
+  svg {
+    width: 18px;
+    height: 18px;
+  }
+}
+
+.notif-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #c44;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+.notif-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: min(360px, 86vw);
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+  z-index: 80;
+}
+
+.notif-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.notif-mark-all {
+  border: none;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.notif-empty {
+  margin: 0;
+  padding: 1rem 0.9rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.notif-list {
+  list-style: none;
+  margin: 0;
+  padding: 0.35rem;
+}
+
+.notif-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.7rem 0.75rem;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+
+  &:hover {
+    background: var(--surface-2);
+  }
+
+  &.unread {
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+  }
+
+  strong {
+    font-size: 0.875rem;
+  }
+
+  span {
+    color: var(--muted);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+}
+
+.notif-item-type {
+  font-size: 0.7rem !important;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--primary) !important;
+}
+
+.toast-stack {
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  z-index: 120;
+  width: min(340px, calc(100vw - 2rem));
+  pointer-events: none;
+}
+
+.toast-card {
+  pointer-events: auto;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.16);
+  padding: 0.8rem 0.9rem;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  animation: toast-in 0.22s ease;
+
+  p {
+    margin: 0.25rem 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.35;
+  }
+}
+
+.toast-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+
+  strong {
+    font-size: 0.9rem;
+  }
+}
+
+.toast-close {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 1.1rem;
+  line-height: 1;
+
+  &:hover {
+    background: var(--surface-2);
+    color: var(--text);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .theme-toggle {
   display: grid;
   place-items: center;
