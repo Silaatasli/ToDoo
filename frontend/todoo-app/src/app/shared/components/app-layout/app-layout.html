@@ -279,6 +279,7 @@
             type="button"
             class="notif-toggle"
             (click)="toggleNotifications($event)"
+            [attr.aria-expanded]="notifOpen()"
             aria-label="Bildirimler"
             title="Bildirimler"
           >
@@ -292,32 +293,112 @@
           </button>
 
           @if (notifOpen()) {
-            <div class="notif-panel">
+            <div class="notif-panel" role="dialog" aria-label="Bildirimler">
               <div class="notif-panel-head">
-                <strong>Bildirimler</strong>
-                @if (unreadCount() > 0) {
-                  <button type="button" class="notif-mark-all" (click)="markAllNotificationsRead($event)">
-                    Tümünü okundu
-                  </button>
-                }
-              </div>
-
-              @if (notifications().length === 0) {
-                <p class="notif-empty">Henüz bildirim yok.</p>
-              } @else {
-                <ul class="notif-list">
-                  @for (item of notifications(); track item.id) {
-                    <li>
+                <div class="notif-panel-title-row">
+                  <h2>Bildirimler</h2>
+                  <div class="notif-head-actions">
+                    <button
+                      type="button"
+                      class="notif-filter-btn"
+                      [class.is-active]="notifUnreadOnly()"
+                      (click)="toggleNotifUnreadOnly($event)"
+                      [attr.aria-pressed]="notifUnreadOnly()"
+                      title="Sadece okunmamış"
+                    >
+                      Sadece okunmamış
+                    </button>
+                    <div class="notif-menu-wrap">
                       <button
                         type="button"
-                        class="notif-item"
-                        [class.unread]="!item.isRead"
-                        (click)="openNotification(item, $event)"
+                        class="notif-menu-btn"
+                        (click)="toggleNotifMenu($event)"
+                        [attr.aria-expanded]="notifMenuOpen()"
+                        aria-label="Bildirim seçenekleri"
                       >
-                        <span class="notif-item-type">{{ notificationTypeLabel(item.type) }}</span>
-                        <strong>{{ item.title }}</strong>
-                        <span>{{ item.body }}</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <circle cx="5" cy="12" r="1.75" fill="currentColor" />
+                          <circle cx="12" cy="12" r="1.75" fill="currentColor" />
+                          <circle cx="19" cy="12" r="1.75" fill="currentColor" />
+                        </svg>
                       </button>
+                      @if (notifMenuOpen()) {
+                        <div class="notif-menu">
+                          <button type="button" (click)="markAllNotificationsRead($event)" [disabled]="unreadCount() === 0">
+                            Tümünü okundu işaretle
+                          </button>
+                        </div>
+                      }
+                    </div>
+                  </div>
+                </div>
+                <div class="notif-tabs" role="tablist" aria-label="Bildirim türleri">
+                  <button type="button" class="notif-tab is-active" role="tab" aria-selected="true">
+                    Doğrudan
+                    @if (unreadCount() > 0) {
+                      <span class="notif-tab-count">{{ unreadCount() }}</span>
+                    }
+                  </button>
+                </div>
+              </div>
+
+              @if (visibleNotifications().length === 0) {
+                <div class="notif-empty">
+                  <span class="notif-empty-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                      <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                    </svg>
+                  </span>
+                  <p>{{ notifUnreadOnly() ? 'Okunmamış bildirim yok.' : 'Henüz bildirim yok.' }}</p>
+                </div>
+              } @else {
+                <ul class="notif-list">
+                  @for (item of visibleNotifications(); track item.id) {
+                    <li>
+                      <div class="notif-item" [class.unread]="!item.isRead">
+                        <button type="button" class="notif-item-main" (click)="openNotification(item, $event)">
+                          <span class="notif-item-icon" [class]="['notif-item-icon', notificationTypeTone(item.type)]" aria-hidden="true">
+                            @switch (item.type) {
+                              @case ('TaskAssigned') {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                              }
+                              @case ('CommentReply') {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/></svg>
+                              }
+                              @case ('Mention') {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-3.92 7.94"/></svg>
+                              }
+                              @case ('TeamMemberAdded') {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                              }
+                              @case ('Announcement') {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11v2a9 9 0 0 0 9 9h1"/><path d="M14 4v16l7-3V7z"/><path d="M11 4H5a2 2 0 0 0-2 2v1"/></svg>
+                              }
+                              @default {
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+                              }
+                            }
+                          </span>
+                          <span class="notif-item-body">
+                            <span class="notif-item-top">
+                              <strong>{{ notificationTypeLabel(item.type) }}</strong>
+                              <time>{{ notificationRelativeTime(item.createdAtUtc) }}</time>
+                            </span>
+                            <span class="notif-item-title">{{ item.title }}</span>
+                            <span class="notif-item-text">{{ item.body }}</span>
+                          </span>
+                        </button>
+                        @if (!item.isRead) {
+                          <button
+                            type="button"
+                            class="notif-unread-dot"
+                            title="Okundu işaretle"
+                            aria-label="Okundu işaretle"
+                            (click)="markNotificationRead(item, $event)"
+                          ></button>
+                        }
+                      </div>
                     </li>
                   }
                 </ul>
@@ -366,17 +447,25 @@
   <div class="toast-stack" aria-live="polite">
     @for (toast of toasts(); track toast.id) {
       <button type="button" class="toast-card" (click)="openNotification(toast, $event)">
-        <div class="toast-head">
-          <strong>{{ toast.title }}</strong>
-          <span
-            class="toast-close"
-            role="button"
-            tabindex="0"
-            (click)="dismissToast(toast, $event)"
-            (keydown.enter)="dismissToast(toast, $event)"
-          >×</span>
-        </div>
-        <p>{{ toast.body }}</p>
+        <span class="toast-icon" [class]="['toast-icon', notificationTypeTone(toast.type)]" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+          </svg>
+        </span>
+        <span class="toast-body">
+          <span class="toast-head">
+            <strong>{{ toast.title }}</strong>
+            <span
+              class="toast-close"
+              role="button"
+              tabindex="0"
+              (click)="dismissToast(toast, $event)"
+              (keydown.enter)="dismissToast(toast, $event)"
+            >×</span>
+          </span>
+          <p>{{ toast.body }}</p>
+        </span>
       </button>
     }
   </div>

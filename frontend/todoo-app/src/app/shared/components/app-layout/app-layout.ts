@@ -61,6 +61,13 @@ export class AppLayout implements OnInit, OnDestroy {
   readonly unreadCount = this.notificationService.unreadCount;
   readonly toasts = this.notificationService.toasts;
   readonly notifOpen = signal(false);
+  readonly notifUnreadOnly = signal(false);
+  readonly notifMenuOpen = signal(false);
+
+  readonly visibleNotifications = computed(() => {
+    const items = this.notifications();
+    return this.notifUnreadOnly() ? items.filter((item) => !item.isRead) : items;
+  });
 
   readonly searchControl = new FormControl('', { nonNullable: true });
   readonly searchOpen = signal(false);
@@ -183,6 +190,7 @@ export class AppLayout implements OnInit, OnDestroy {
     this.searchOpen.set(false);
     this.recentOpen.set(false);
     this.notifOpen.set(false);
+    this.notifMenuOpen.set(false);
   }
 
   openSearch(event: Event): void {
@@ -248,18 +256,39 @@ export class AppLayout implements OnInit, OnDestroy {
   toggleNotifications(event: Event): void {
     event.stopPropagation();
     this.notifOpen.update((open) => !open);
+    this.notifMenuOpen.set(false);
     this.searchOpen.set(false);
     this.recentOpen.set(false);
   }
 
+  toggleNotifUnreadOnly(event: Event): void {
+    event.stopPropagation();
+    this.notifUnreadOnly.update((value) => !value);
+  }
+
+  toggleNotifMenu(event: Event): void {
+    event.stopPropagation();
+    this.notifMenuOpen.update((open) => !open);
+  }
+
   markAllNotificationsRead(event: Event): void {
     event.stopPropagation();
+    this.notifMenuOpen.set(false);
     this.notificationService.markAllRead().subscribe();
+  }
+
+  markNotificationRead(item: AppNotification, event: Event): void {
+    event.stopPropagation();
+    if (item.isRead) {
+      return;
+    }
+    this.notificationService.markRead(item.id).subscribe();
   }
 
   openNotification(item: AppNotification, event: Event): void {
     event.stopPropagation();
     this.notifOpen.set(false);
+    this.notifMenuOpen.set(false);
     this.notificationService.dismissToast(item.id);
 
     if (!item.isRead) {
@@ -291,18 +320,65 @@ export class AppLayout implements OnInit, OnDestroy {
   notificationTypeLabel(type: string): string {
     switch (type) {
       case 'TaskAssigned':
-        return 'Görev';
+        return 'Görev atandı';
       case 'CommentReply':
-        return 'Yanıt';
+        return 'Yorum yanıtı';
       case 'TeamMemberAdded':
-        return 'Takım';
+        return 'Takıma eklendiniz';
       case 'Announcement':
-        return 'Duyuru';
+        return 'Takım duyurusu';
       case 'Mention':
-        return 'Bahsetme';
+        return 'Sizden bahsedildi';
       default:
         return 'Bildirim';
     }
+  }
+
+  notificationTypeTone(type: string): string {
+    switch (type) {
+      case 'TaskAssigned':
+        return 'tone-task';
+      case 'CommentReply':
+        return 'tone-reply';
+      case 'TeamMemberAdded':
+        return 'tone-team';
+      case 'Announcement':
+        return 'tone-announce';
+      case 'Mention':
+        return 'tone-mention';
+      default:
+        return 'tone-default';
+    }
+  }
+
+  notificationRelativeTime(value: string): string {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return '';
+    }
+
+    const diffMs = Date.now() - date.getTime();
+    const diffSec = Math.max(0, Math.floor(diffMs / 1000));
+    if (diffSec < 60) {
+      return 'Az önce';
+    }
+
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) {
+      return `${diffMin} dk önce`;
+    }
+
+    const diffHour = Math.floor(diffMin / 60);
+    if (diffHour < 24) {
+      return `${diffHour} sa önce`;
+    }
+
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 7) {
+      return `${diffDay} g önce`;
+    }
+
+    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
   }
 
   onRecentEnter(): void {
