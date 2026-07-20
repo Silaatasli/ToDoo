@@ -211,9 +211,60 @@
                     <button type="button" class="link-btn" (click)="cancelReply()">İptal</button>
                   </div>
                 }
-                <div class="comment-composer-editor">
+                <div class="comment-composer-editor" [class.has-mention-picker]="mentionPickerOpen()">
                   <div class="comment-composer-row">
-                    <textarea class="comment-input" rows="1" placeholder="Bir yorum ekleyin..." [formControl]="commentForm.controls.body" [disabled]="postingComment()"></textarea>
+                    <div class="comment-input-wrap" (click)="$event.stopPropagation()">
+                      <textarea
+                        #commentInput
+                        class="comment-input"
+                        rows="1"
+                        placeholder="Bir yorum ekleyin... (@ ile bahsedin)"
+                        [formControl]="commentForm.controls.body"
+                        [disabled]="postingComment()"
+                        (input)="onCommentInput($event)"
+                        (keydown)="onCommentKeydown($event)"
+                      ></textarea>
+                      @if (mentionPickerOpen()) {
+                        <div class="mention-picker" role="listbox" aria-label="Bahsetmek için üye seçin">
+                          @if (filteredMentionMembers().length === 0) {
+                            <p class="mention-picker-hint">Eşleşen takım üyesi bulunamadı.</p>
+                          } @else {
+                            <ul class="mention-picker-list">
+                              @for (member of filteredMentionMembers(); track member.userId; let idx = $index) {
+                                <li role="presentation">
+                                  <button
+                                    type="button"
+                                    class="mention-picker-item"
+                                    role="option"
+                                    [class.is-active]="idx === mentionActiveIndex()"
+                                    [attr.aria-selected]="idx === mentionActiveIndex()"
+                                    (mouseenter)="setMentionActiveIndex(idx)"
+                                    (mousedown)="$event.preventDefault(); selectMentionMember(member, commentInput)"
+                                  >
+                                    <span
+                                      class="mention-picker-avatar"
+                                      [class]="commentAvatarTone(member.userId)"
+                                      [class.has-photo]="!!memberPhotoUrl(member.userId)"
+                                      aria-hidden="true"
+                                    >
+                                      @if (memberPhotoUrl(member.userId); as photoUrl) {
+                                        <img [src]="photoUrl" [alt]="memberName(member)" />
+                                      } @else {
+                                        {{ initial(memberName(member)) }}
+                                      }
+                                    </span>
+                                    <span class="mention-picker-text">
+                                      <strong>{{ memberName(member) }}</strong>
+                                      <span>{{ member.email }}</span>
+                                    </span>
+                                  </button>
+                                </li>
+                              }
+                            </ul>
+                          }
+                        </div>
+                      }
+                    </div>
                     <label class="comment-tool-btn" title="Dosya ekle">
                       <input type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif,application/pdf" (change)="onCommentFilesSelected($event)" [disabled]="postingComment()" />
                       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 12v5a3 3 0 0 0 6 0V7a2 2 0 0 0-4 0v7" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -305,7 +356,15 @@
                         <time>{{ toLocalDate(comment.createdDate) | date: 'dd MMM yyyy, HH:mm' }}</time>
                       </header>
                       @if (comment.body && comment.body !== '(dosya eki)') {
-                        <p class="comment-body">{{ comment.body }}</p>
+                        <p class="comment-body">
+                          @for (segment of commentBodySegments(comment.body); track $index) {
+                            @if (segment.kind === 'mention' && segment.userId) {
+                              <a class="comment-mention" [routerLink]="['/profile', segment.userId]">@{{ segment.displayName }}</a>
+                            } @else {
+                              {{ segment.text }}
+                            }
+                          }
+                        </p>
                       }
                       @if (comment.attachments.length > 0) {
                         <ul class="comment-attachments">

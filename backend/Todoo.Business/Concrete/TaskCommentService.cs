@@ -11,6 +11,7 @@ namespace Todoo.Business.Concrete;
 public class TaskCommentService : ITaskCommentService
 {
     private const long MaxFileSizeBytes = 10 * 1024 * 1024;
+    private static readonly Regex MentionTokenRegex = new(@"@\{(?<userId>\d+)\|(?<name>[^}]+)\}", RegexOptions.Compiled);
 
     private static readonly HashSet<string> AllowedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -105,6 +106,11 @@ public class TaskCommentService : ITaskCommentService
         }
 
         var task = taskResult.Data!;
+        var mentionTargetUserIds = await ResolveMentionTargetUserIdsAsync(
+            task.TeamId,
+            trimmedBody,
+            userId,
+            parentAuthorUserId);
         var comment = new TaskComment
         {
             TaskId = taskId,
@@ -124,6 +130,18 @@ public class TaskCommentService : ITaskCommentService
         {
             await _notificationDispatch.NotifyCommentReplyAsync(
                 parentAuthorUserId.Value,
+                userId,
+                task.TeamId,
+                task.BoardId,
+                task.Id,
+                task.Title,
+                preview);
+        }
+
+        foreach (var mentionUserId in mentionTargetUserIds)
+        {
+            await _notificationDispatch.NotifyMentionAsync(
+                mentionUserId,
                 userId,
                 task.TeamId,
                 task.BoardId,
@@ -456,6 +474,53 @@ public class TaskCommentService : ITaskCommentService
         });
 
         await _unitOfWork.SaveChangesAsync();
+    }
+
+    private async Task<IReadOnlyCollection<int>> ResolveMentionTargetUserIdsAsync(
+        int teamId,
+        string body,
+        int actorUserId,
+        int? parentAuthorUserId)
+    {
+        var matches = MentionTokenRegex.Matches(body);
+        if (matches.Count == 0)
+        {
+            return [];
+        }
+
+        var memberIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.TeamId == teamId)
+            .Select(member => member.UserId)
+            .ToHashSet();
+
+        if (memberIds.Count == 0)
+        {
+            return [];
+        }
+
+        var results = new HashSet<int>();
+
+        foreach (Match match in matches)
+        {
+            if (!int.TryParse(match.Groups["userId"].Value, out var mentionedUserId))
+            {
+                continue;
+            }
+
+            if (!memberIds.Contains(mentionedUserId))
+            {
+                continue;
+            }
+
+            if (mentionedUserId == actorUserId || mentionedUserId == parentAuthorUserId)
+            {
+                continue;
+            }
+
+            results.Add(mentionedUserId);
+        }
+
+        return results.ToList();
     }
 
     private static TaskCommentDto MapToDto(

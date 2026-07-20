@@ -15,6 +15,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
+import { RouterLink } from '@angular/router';
 import { concatMap, from, of, switchMap, toArray } from 'rxjs';
 import { AuthService } from '../../../../../core/services/auth.service';
 import { CategoryService } from '../../../../../core/services/category.service';
@@ -35,11 +36,18 @@ import {
   TeamActivityLog,
   TeamMember
 } from '../../../../../models/team.model';
+import {
+  buildMentionText,
+  DraftMention,
+  encodeCommentBody,
+  parseCommentBody,
+  syncDraftMentions
+} from '../../comment-mention.utils';
 import { initial, memberName, PRIORITY_OPTIONS, priorityClass, priorityLabel } from '../../board-ui.utils';
 
 @Component({
   selector: 'app-task-detail-modal',
-  imports: [ReactiveFormsModule, DatePipe, NgTemplateOutlet],
+  imports: [ReactiveFormsModule, DatePipe, NgTemplateOutlet, RouterLink],
   templateUrl: './task-detail-modal.html',
   styleUrl: './task-detail-modal.scss'
 })
@@ -119,6 +127,36 @@ export class TaskDetailModalComponent {
     body: ['', [Validators.maxLength(4000)]]
   });
 
+  readonly mentionPickerOpen = signal(false);
+  readonly mentionQuery = signal('');
+  readonly mentionStartIndex = signal(0);
+  readonly mentionCursorIndex = signal(0);
+  readonly mentionActiveIndex = signal(0);
+  readonly draftMentions = signal<DraftMention[]>([]);
+  readonly commentDraftBody = signal('');
+
+  readonly filteredMentionMembers = computed(() => {
+    const query = this.normalizeMentionQuery(this.mentionQuery());
+    const members = this.members();
+
+    if (!query) {
+      return members;
+    }
+
+    return members.filter((member) => {
+      const searchable = [
+        memberName(member),
+        member.firstName ?? '',
+        member.lastName ?? '',
+        member.email
+      ]
+        .map((value) => this.normalizeMentionQuery(value))
+        .filter((value) => value.length > 0);
+
+      return searchable.some((value) => value.includes(query));
+    });
+  });
+
   readonly detailForm = this.fb.nonNullable.group({
     title: ['', [Validators.required, Validators.maxLength(200)]],
     description: [''],
@@ -193,6 +231,10 @@ export class TaskDetailModalComponent {
     if (this.showColumnMenu()) {
       this.closeColumnMenu();
     }
+
+    if (this.mentionPickerOpen()) {
+      this.closeMentionPicker();
+    }
   }
 
   private loadTask(taskId: number): void {
@@ -215,6 +257,9 @@ export class TaskDetailModalComponent {
     this.showColumnMenu.set(false);
     this.movingColumn.set(false);
     this.commentForm.reset({ body: '' });
+    this.commentDraftBody.set('');
+    this.draftMentions.set([]);
+    this.closeMentionPicker();
     this.revokeAttachmentPreviewUrls();
 
     this.taskService.getTask(taskId).subscribe({
@@ -680,6 +725,124 @@ export class TaskDetailModalComponent {
     this.pendingCommentFiles.update((current) => current.filter((_, i) => i !== index));
   }
 
+  commentBodySegments(body: string) {
+    return parseCommentBody(body);
+  }
+
+  onCommentInput(event: Event): void {
+    const textarea = event.target as HTMLTextAreaElement;
+    const value = textarea.value;
+    const previousBody = this.commentDraftBody();
+    this.draftMentions.set(syncDraftMentions(previousBody, value, this.draftMentions()));
+    this.commentDraftBody.set(value);
+    this.commentForm.controls.body.setValue(value, { emitEvent: false });
+    const cursor = textarea.selectionStart ?? value.length;
+    const beforeCursor = value.slice(0, cursor);
+    const mentionMatch = beforeCursor.match(/@([^\s@{}]*)$/);
+
+    if (mentionMatch) {
+      this.mentionPickerOpen.set(true);
+      this.mentionQuery.set(mentionMatch[1]);
+      this.mentionStartIndex.set(cursor - mentionMatch[0].length);
+      this.mentionCursorIndex.set(cursor);
+      this.mentionActiveIndex.set(0);
+      return;
+    }
+
+    this.closeMentionPicker();
+  }
+
+  onCommentKeydown(event: KeyboardEvent): void {
+    if (!this.mentionPickerOpen()) {
+      return;
+    }
+
+    const members = this.filteredMentionMembers();
+    if (event.key === 'ArrowDown') {
+      if (members.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      this.mentionActiveIndex.update((index) => (index + 1) % members.length);
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      if (members.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      this.mentionActiveIndex.update((index) => (index - 1 + members.length) % members.length);
+      return;
+    }
+
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      if (members.length === 0) {
+        return;
+      }
+      event.preventDefault();
+      this.insertMention(members[this.mentionActiveIndex()], event.target as HTMLTextAreaElement);
+      return;
+    }
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.closeMentionPicker();
+    }
+  }
+
+  selectMentionMember(member: TeamMember, textarea?: HTMLTextAreaElement): void {
+    this.insertMention(member, textarea);
+  }
+
+  setMentionActiveIndex(index: number): void {
+    this.mentionActiveIndex.set(index);
+  }
+
+  private insertMention(member: TeamMember, textarea?: HTMLTextAreaElement): void {
+    const start = this.mentionStartIndex();
+    const cursor = this.mentionCursorIndex();
+    const body = this.commentForm.controls.body.value;
+    const displayName = memberName(member);
+    const mentionText = buildMentionText(displayName);
+    const nextBody = `${body.slice(0, start)}${mentionText} ${body.slice(cursor)}`;
+    const nextCursor = start + mentionText.length + 1;
+
+    this.commentForm.controls.body.setValue(nextBody);
+    this.commentDraftBody.set(nextBody);
+    this.draftMentions.update((mentions) => [
+      ...syncDraftMentions(body, nextBody, mentions),
+      {
+        start,
+        end: start + mentionText.length,
+        userId: member.userId,
+        displayName
+      }
+    ]);
+    this.closeMentionPicker();
+
+    if (textarea) {
+      queueMicrotask(() => {
+        textarea.focus();
+        textarea.setSelectionRange(nextCursor, nextCursor);
+      });
+    }
+  }
+
+  private closeMentionPicker(): void {
+    this.mentionPickerOpen.set(false);
+    this.mentionQuery.set('');
+    this.mentionActiveIndex.set(0);
+  }
+
+  private normalizeMentionQuery(value: string | null | undefined): string {
+    return (value ?? '')
+      .trim()
+      .toLocaleLowerCase('tr-TR')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '');
+  }
+
   submitComment(): void {
     const detail = this.detail();
     if (!detail || this.postingComment()) {
@@ -693,8 +856,9 @@ export class TaskDetailModalComponent {
       return;
     }
 
+    const encodedBody = encodeCommentBody(body, this.draftMentions());
     const request: CreateCommentRequest = {
-      body: body || (files.length > 0 ? '(dosya eki)' : ''),
+      body: encodedBody || (files.length > 0 ? '(dosya eki)' : ''),
       parentCommentId: this.replyToCommentId()
     };
 
@@ -719,6 +883,9 @@ export class TaskDetailModalComponent {
         next: () => {
           this.postingComment.set(false);
           this.commentForm.reset({ body: '' });
+          this.commentDraftBody.set('');
+          this.draftMentions.set([]);
+          this.closeMentionPicker();
           this.pendingCommentFiles.set([]);
           this.replyToCommentId.set(null);
           this.loadTaskComments(detail.id);

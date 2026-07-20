@@ -26,13 +26,13 @@ public class RedisNotificationStore : INotificationStore
         _options = options.Value;
     }
 
-    private IDatabase Db => _redis.GetDatabase();
+    private IDatabase Db => _redis.GetDatabase(); // Redis veritabani nesnesi
 
     private TimeSpan Ttl => TimeSpan.FromDays(Math.Max(1, _options.RetentionDays));
 
     private int MaxPerUser => Math.Max(1, _options.MaxPerUser);
 
-    public async Task AddAsync(NotificationMessage message, CancellationToken cancellationToken = default)
+    public async Task AddAsync(NotificationMessage message, CancellationToken cancellationToken = default) //bildirimi redise ekler
     {
         var item = new NotificationItemDto
         {
@@ -52,6 +52,7 @@ public class RedisNotificationStore : INotificationStore
         var unreadKey = UnreadKey(message.TargetUserId);
         var payload = JsonSerializer.Serialize(item, JsonOptions);
 
+        //redise yazma islemleri: once listeye ekle, sonra trimle, sonra okunmamis sayisini arttir, sonra TTL'i ayarla
         await Db.ListLeftPushAsync(listKey, payload);
         await Db.ListTrimAsync(listKey, 0, MaxPerUser - 1);
         await Db.KeyExpireAsync(listKey, Ttl);
@@ -60,7 +61,7 @@ public class RedisNotificationStore : INotificationStore
     }
 
     public async Task<IReadOnlyList<NotificationItemDto>> ListAsync(int userId, int take = 30)
-    {
+    {   //redis'ten kullaniciya ait bildirimleri listele, take parametresi ile maksimum sayiyi sinirla
         take = Math.Clamp(take, 1, MaxPerUser);
         var values = await Db.ListRangeAsync(ListKey(userId), 0, take - 1);
         var items = new List<NotificationItemDto>(values.Length);
@@ -151,18 +152,18 @@ public class RedisNotificationStore : INotificationStore
     private async Task DecrementUnreadAsync(int userId)
     {
         var unreadKey = UnreadKey(userId);
-        var next = await Db.StringDecrementAsync(unreadKey);
+        var next = await Db.StringDecrementAsync(unreadKey); // okunmamis sayisini azalt
         if (next < 0)
         {
-            await Db.StringSetAsync(unreadKey, 0, Ttl);
+            await Db.StringSetAsync(unreadKey, 0, Ttl); // okunmamis sayisi negatif olursa sifirla ve TTL'i ayarla
         }
         else
         {
-            await Db.KeyExpireAsync(unreadKey, Ttl);
+            await Db.KeyExpireAsync(unreadKey, Ttl); // okunmamis sayisi sifir veya pozitif ise TTL'i ayarla
         }
     }
 
-    private static string ListKey(int userId) => $"{ListKeyPrefix}{userId}";
+    private static string ListKey(int userId) => $"{ListKeyPrefix}{userId}"; // kullaniciya ait bildirim listesi keyi
 
-    private static string UnreadKey(int userId) => $"{ListKeyPrefix}{userId}{UnreadKeySuffix}";
+    private static string UnreadKey(int userId) => $"{ListKeyPrefix}{userId}{UnreadKeySuffix}"; // kullaniciya ait okunmamis bildirim sayisi keyi
 }
