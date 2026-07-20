@@ -100,25 +100,37 @@ public class NotificationDispatchService
         });
     }
 
-    /// <summary>Takim duyurusu (ileride duyuru API'sinden cagrilacak).</summary>
+    /// <summary>Takim duyurusu. includeActor=true ile yayinciya da bildirim gider (zamanlanmis yayin).</summary>
     public Task NotifyAnnouncementAsync(
         IEnumerable<int> memberUserIds,
         int actorUserId,
         int teamId,
         int announcementId,
         string title,
-        string body)
+        string body,
+        string teamName,
+        string actorDisplayName,
+        bool includeActor = false)
     {
+        var actor = string.IsNullOrWhiteSpace(actorDisplayName) ? "Bir kullanıcı" : actorDisplayName.Trim();
+        var team = string.IsNullOrWhiteSpace(teamName) ? "bir takım" : teamName.Trim();
+        var announcementTitle = Truncate(
+            string.IsNullOrWhiteSpace(title) ? "Takım duyurusu" : title.Trim(),
+            120);
+        var preview = Truncate(body, 120);
+        var meta = $"{actor} · {team}";
+        var messageBody = string.IsNullOrWhiteSpace(preview) ? meta : $"{meta}: {preview}";
+
         var tasks = memberUserIds
-            .Where(id => id != actorUserId)
+            .Where(id => includeActor || id != actorUserId)
             .Distinct()
             .Select(userId => PublishSafeAsync(new NotificationMessage
             {
                 Type = NotificationTypes.Announcement,
                 TargetUserId = userId,
                 ActorUserId = actorUserId,
-                Title = "Yeni takım duyurusu",
-                Body = Truncate(string.IsNullOrWhiteSpace(title) ? body : title, 120),
+                Title = announcementTitle,
+                Body = Truncate(messageBody, 220),
                 TeamId = teamId,
                 AnnouncementId = announcementId
             }));

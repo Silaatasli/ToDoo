@@ -293,7 +293,7 @@
           </button>
 
           @if (notifOpen()) {
-            <div class="notif-panel" role="dialog" aria-label="Bildirimler">
+            <div class="notif-panel" role="dialog" aria-label="Bildirimler" (click)="$event.stopPropagation()">
               <div class="notif-panel-head">
                 <div class="notif-panel-title-row">
                   <h2>Bildirimler</h2>
@@ -327,11 +327,15 @@
                           <button type="button" (click)="markAllNotificationsRead($event)" [disabled]="unreadCount() === 0">
                             Tümünü okundu işaretle
                           </button>
+                          <button type="button" class="is-danger" (click)="clearAllNotifications($event)" [disabled]="notifications().length === 0">
+                            Tüm bildirimleri sil
+                          </button>
                         </div>
                       }
                     </div>
                   </div>
                 </div>
+
                 <div class="notif-tabs" role="tablist" aria-label="Bildirim türleri">
                   <button type="button" class="notif-tab is-active" role="tab" aria-selected="true">
                     Doğrudan
@@ -389,15 +393,31 @@
                             <span class="notif-item-text">{{ item.body }}</span>
                           </span>
                         </button>
-                        @if (!item.isRead) {
+                        <div class="notif-item-actions">
+                          @if (!item.isRead) {
+                            <button
+                              type="button"
+                              class="notif-unread-dot"
+                              title="Okundu işaretle"
+                              aria-label="Okundu işaretle"
+                              (click)="markNotificationRead(item, $event)"
+                            ></button>
+                          }
                           <button
                             type="button"
-                            class="notif-unread-dot"
-                            title="Okundu işaretle"
-                            aria-label="Okundu işaretle"
-                            (click)="markNotificationRead(item, $event)"
-                          ></button>
-                        }
+                            class="notif-delete-btn"
+                            title="Sil"
+                            aria-label="Bildirimi sil"
+                            (click)="deleteNotification(item, $event)"
+                          >
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4h8v2" />
+                              <path d="M19 6l-1 14H6L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                     </li>
                   }

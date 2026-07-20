@@ -13,4 +13,12 @@ public interface INotificationStore
     Task<bool> MarkReadAsync(int userId, string notificationId);
 
     Task MarkAllReadAsync(int userId);
+
+    Task<int> MarkReadManyAsync(int userId, IEnumerable<string> notificationIds);
+
+    Task<bool> DeleteAsync(int userId, string notificationId);
+
+    Task<int> DeleteManyAsync(int userId, IEnumerable<string> notificationIds);
+
+    Task ClearAsync(int userId);
 }

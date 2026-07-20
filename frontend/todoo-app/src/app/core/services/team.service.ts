@@ -10,9 +10,11 @@ import {
   CreateBoardRequest,
   CreateTeamRequest,
   CreateTeamTaskRequest,
+  CreateTeamAnnouncementRequest,
   ReorderColumnsRequest,
   TaskListItem,
   TeamActivityLog,
+  TeamAnnouncement,
   TeamBoard,
   TeamDetail,
   TeamListItem
@@ -94,5 +96,34 @@ export class TeamService {
 
   getActivity(id: number): Observable<TeamActivityLog[]> {
     return this.http.get<TeamActivityLog[]>(`${this.baseUrl}/${id}/activity`);
+  }
+
+  getAnnouncements(teamId: number): Observable<TeamAnnouncement[]> {
+    return this.http.get<TeamAnnouncement[]>(`${this.baseUrl}/${teamId}/announcements`);
+  }
+
+  createAnnouncement(teamId: number, request: CreateTeamAnnouncementRequest): Observable<TeamAnnouncement> {
+    return this.http.post<TeamAnnouncement>(`${this.baseUrl}/${teamId}/announcements`, request);
+  }
+
+  publishAnnouncement(teamId: number, announcementId: number): Observable<TeamAnnouncement> {
+    return this.http.post<TeamAnnouncement>(
+      `${this.baseUrl}/${teamId}/announcements/${announcementId}/publish`,
+      {}
+    );
+  }
+
+  deleteAnnouncement(teamId: number, announcementId: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/${teamId}/announcements/${announcementId}`);
+  }
+
+  setAnnouncementPublishPermission(
+    teamId: number,
+    memberUserId: number,
+    canPublish: boolean
+  ): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/${teamId}/members/${memberUserId}/announcement-permission`, {
+      canPublish
+    });
   }
 }

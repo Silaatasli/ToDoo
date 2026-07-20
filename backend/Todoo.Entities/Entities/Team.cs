@@ -33,4 +33,7 @@ public class Team
 
     [JsonIgnore]
     public ICollection<TaskActivityLog> ActivityLogs { get; set; } = [];
+
+    [JsonIgnore]
+    public ICollection<TeamAnnouncement> Announcements { get; set; } = [];
 }

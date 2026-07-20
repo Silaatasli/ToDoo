@@ -12,6 +12,9 @@ public class TeamMember
 
     public DateTime JoinedDate { get; set; } = DateTime.UtcNow;
 
+    /// <summary>Lider disinda duyuru yayinlayabilme yetkisi.</summary>
+    public bool CanPublishAnnouncements { get; set; }
+
     [JsonIgnore]
     public Team Team { get; set; } = null!;
 

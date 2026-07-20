@@ -77,4 +77,65 @@ public class NotificationsController : ControllerBase
         await _notificationStore.MarkAllReadAsync(userId);
         return Ok(new { success = true, unreadCount = 0 });
     }
+
+    [HttpPost("read-many")]
+    public async Task<IActionResult> MarkReadMany([FromBody] NotificationIdsRequest request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        await _notificationStore.MarkReadManyAsync(userId, request.Ids ?? []);
+        var unread = await _notificationStore.GetUnreadCountAsync(userId);
+        return Ok(new { success = true, unreadCount = unread });
+    }
+
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> Delete(string id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var ok = await _notificationStore.DeleteAsync(userId, id);
+        if (!ok)
+        {
+            return NotFound(new { success = false, message = "Bildirim bulunamadı." });
+        }
+
+        var unread = await _notificationStore.GetUnreadCountAsync(userId);
+        return Ok(new { success = true, unreadCount = unread });
+    }
+
+    [HttpPost("delete-many")]
+    public async Task<IActionResult> DeleteMany([FromBody] NotificationIdsRequest request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var deleted = await _notificationStore.DeleteManyAsync(userId, request.Ids ?? []);
+        var unread = await _notificationStore.GetUnreadCountAsync(userId);
+        return Ok(new { success = true, deleted, unreadCount = unread });
+    }
+
+    [HttpPost("clear")]
+    public async Task<IActionResult> Clear()
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        await _notificationStore.ClearAsync(userId);
+        return Ok(new { success = true, unreadCount = 0 });
+    }
+}
+
+public sealed class NotificationIdsRequest
+{
+    public string[]? Ids { get; set; }
 }

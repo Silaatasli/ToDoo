@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Todoo.DataAccess.Contexts;
 
@@ -11,9 +12,11 @@ using Todoo.DataAccess.Contexts;
 namespace Todoo.DataAccess.Migrations
 {
     [DbContext(typeof(TodooDbContext))]
-    partial class TodooDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260720113516_AddTeamAnnouncements")]
+    partial class AddTeamAnnouncements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -362,15 +365,6 @@ namespace Todoo.DataAccess.Migrations
 
                     b.Property<DateTime>("CreatedDate")
                         .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("PublishedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<DateTime?>("ScheduledPublishAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("int");
 
                     b.Property<int>("TeamId")
                         .HasColumnType("int");

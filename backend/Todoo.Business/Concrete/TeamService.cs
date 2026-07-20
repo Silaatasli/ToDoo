@@ -149,6 +149,7 @@ public class TeamService : ITeamService
                     FirstName = user?.FirstName,
                     LastName = user?.LastName,
                     IsLeader = member.UserId == team.LeaderUserId,
+                    CanPublishAnnouncements = member.UserId == team.LeaderUserId || member.CanPublishAnnouncements, //duyuru yayınlama yetkisi, lider ise otomatik olarak true, değilse member.CanPublishAnnouncements değerine bakılır
                     JoinedDate = member.JoinedDate,
                     HasProfilePhoto = !string.IsNullOrWhiteSpace(user?.ProfilePhotoObjectKey)
                 };

@@ -49,6 +49,57 @@ export class NotificationService {
       );
   }
 
+  markReadMany(ids: string[]): Observable<{ success: boolean; unreadCount: number }> {
+    return this.http
+      .post<{ success: boolean; unreadCount: number }>(`${environment.apiUrl}/notifications/read-many`, { ids })
+      .pipe(
+        tap((result) => {
+          this.unreadCount.set(result.unreadCount ?? 0);
+          const idSet = new Set(ids);
+          this.items.update((list) =>
+            list.map((item) => (idSet.has(item.id) ? { ...item, isRead: true } : item))
+          );
+        })
+      );
+  }
+
+  delete(id: string): Observable<{ success: boolean; unreadCount: number }> {
+    return this.http
+      .delete<{ success: boolean; unreadCount: number }>(`${environment.apiUrl}/notifications/${id}`)
+      .pipe(
+        tap((result) => {
+          this.unreadCount.set(result.unreadCount ?? 0);
+          this.items.update((list) => list.filter((item) => item.id !== id));
+        })
+      );
+  }
+
+  deleteMany(ids: string[]): Observable<{ success: boolean; deleted: number; unreadCount: number }> {
+    return this.http
+      .post<{ success: boolean; deleted: number; unreadCount: number }>(
+        `${environment.apiUrl}/notifications/delete-many`,
+        { ids }
+      )
+      .pipe(
+        tap((result) => {
+          this.unreadCount.set(result.unreadCount ?? 0);
+          const idSet = new Set(ids);
+          this.items.update((list) => list.filter((item) => !idSet.has(item.id)));
+        })
+      );
+  }
+
+  clear(): Observable<{ success: boolean; unreadCount: number }> {
+    return this.http
+      .post<{ success: boolean; unreadCount: number }>(`${environment.apiUrl}/notifications/clear`, {})
+      .pipe(
+        tap(() => {
+          this.unreadCount.set(0);
+          this.items.set([]);
+        })
+      );
+  }
+
   pushRealtime(notification: AppNotification, unreadCount: number): void {
     this.unreadCount.set(unreadCount);
     this.items.update((list) => [notification, ...list.filter((item) => item.id !== notification.id)].slice(0, 50));

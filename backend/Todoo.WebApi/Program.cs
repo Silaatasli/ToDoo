@@ -203,8 +203,10 @@ builder.Services.Configure<LuceneSearchOptions>(options =>
 });
 builder.Services.AddSingleton<ILuceneSearchIndex, LuceneSearchIndex>();
 builder.Services.AddHostedService<LuceneSearchHostedService>();
+builder.Services.AddHostedService<AnnouncementScheduleHostedService>();
 builder.Services.AddScoped<IUnitOfWork, UnitOfWork>();
 builder.Services.AddScoped<ITeamService, TeamService>();
+builder.Services.AddScoped<ITeamAnnouncementService, TeamAnnouncementService>();
 builder.Services.AddScoped<ITaskService, TaskService>();
 builder.Services.AddScoped<ITaskAttachmentService, TaskAttachmentService>();
 builder.Services.AddScoped<ITaskCommentService, TaskCommentService>();

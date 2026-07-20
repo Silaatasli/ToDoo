@@ -15,11 +15,16 @@ public class TeamsController : ControllerBase
 {
     private readonly ITeamService _teamService;
     private readonly ITaskService _taskService;
+    private readonly ITeamAnnouncementService _announcementService;
 
-    public TeamsController(ITeamService teamService, ITaskService taskService)
+    public TeamsController(
+        ITeamService teamService,
+        ITaskService taskService,
+        ITeamAnnouncementService announcementService)
     {
         _teamService = teamService;
         _taskService = taskService;
+        _announcementService = announcementService;
     }
 
     private bool TryGetUserId(out int userId)
@@ -33,7 +38,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.CreateTeamAsync(request.Name, request.BoardName, request.ColumnTitles, userId);
@@ -45,7 +50,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var teams = await _teamService.GetTeamsForUserAsync(userId);
@@ -57,7 +62,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.GetTeamByIdAsync(id, userId);
@@ -69,7 +74,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.DeleteTeamAsync(id, userId);
@@ -81,7 +86,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.GetBoardsAsync(id, userId);
@@ -93,7 +98,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.CreateBoardAsync(id, request.Name, request.ColumnTitles, userId);
@@ -105,7 +110,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.DeleteBoardAsync(id, boardId, userId);
@@ -117,7 +122,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.GetBoardAsync(id, boardId, userId);
@@ -130,7 +135,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.GetTeamBoardAsync(id, userId);
@@ -142,7 +147,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.AddBoardColumnAsync(id, boardId, request.Title, userId);
@@ -154,7 +159,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.UpdateBoardColumnAsync(id, boardId, columnId, request.Title, userId);
@@ -166,7 +171,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var result = await _teamService.ReorderBoardColumnsAsync(id, boardId, request.ColumnIds, userId);
@@ -178,7 +183,7 @@ public class TeamsController : ControllerBase
     {
         if (!TryGetUserId(out var userId))
         {
-            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
         }
 
         var task = new TaskItem
@@ -235,6 +240,75 @@ public class TeamsController : ControllerBase
         }
 
         var result = await _teamService.GetTeamActivityAsync(id, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpGet("{id:int}/announcements")]
+    public async Task<IActionResult> ListAnnouncements(int id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _announcementService.ListAsync(id, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPost("{id:int}/announcements")]
+    public async Task<IActionResult> CreateAnnouncement(int id, [FromBody] CreateTeamAnnouncementRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _announcementService.CreateAsync(
+            id,
+            request.Title,
+            request.Body,
+            request.PublishMode,
+            request.ScheduledPublishAt,
+            userId);
+        return result.ToActionResult(created => Ok(created));
+    }
+
+    [HttpPost("{id:int}/announcements/{announcementId:int}/publish")]
+    public async Task<IActionResult> PublishAnnouncement(int id, int announcementId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _announcementService.PublishAsync(id, announcementId, userId);
+        return result.ToActionResult(published => Ok(published));
+    }
+
+    [HttpDelete("{id:int}/announcements/{announcementId:int}")]
+    public async Task<IActionResult> DeleteAnnouncement(int id, int announcementId)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _announcementService.DeleteAsync(id, announcementId, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPut("{id:int}/members/{memberUserId:int}/announcement-permission")]
+    public async Task<IActionResult> SetAnnouncementPublishPermission(
+        int id,
+        int memberUserId,
+        [FromBody] SetAnnouncementPublishPermissionRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _announcementService.SetPublishPermissionAsync(id, memberUserId, request.CanPublish, userId);
         return result.ToActionResult();
     }
 }

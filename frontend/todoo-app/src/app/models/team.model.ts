@@ -13,6 +13,7 @@ export interface TeamMember {
   firstName?: string | null;
   lastName?: string | null;
   isLeader: boolean;
+  canPublishAnnouncements: boolean;
   joinedDate: string;
   hasProfilePhoto: boolean;
 }
@@ -219,4 +220,29 @@ export interface TaskComment {
 export interface CreateCommentRequest {
   body: string;
   parentCommentId?: number | null;
+}
+
+export interface TeamAnnouncement {
+  id: number;
+  teamId: number;
+  title: string;
+  body: string;
+  status: AnnouncementStatus;
+  scheduledPublishAt?: string | null;
+  publishedAt?: string | null;
+  authorUserId: number;
+  authorDisplayName: string;
+  authorEmail: string;
+  createdDate: string;
+}
+
+export type AnnouncementStatus = 0 | 1 | 2 | 'Draft' | 'Scheduled' | 'Published';
+
+export type AnnouncementPublishMode = 'Draft' | 'Now' | 'Schedule';
+
+export interface CreateTeamAnnouncementRequest {
+  title: string;
+  body: string;
+  publishMode: AnnouncementPublishMode;
+  scheduledPublishAt?: string | null;
 }

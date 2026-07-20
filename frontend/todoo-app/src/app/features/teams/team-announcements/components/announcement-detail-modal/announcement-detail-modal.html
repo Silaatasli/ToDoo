@@ -1,0 +1,49 @@
+<div class="modal-backdrop" (click)="onBackdropClick()">
+  <section class="modal-card announcement-detail-card" (click)="$event.stopPropagation()" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <div class="detail-header-meta">
+        <span class="detail-issue-key">Duyuru #{{ announcement().id }}</span>
+        <span class="detail-chip" [class]="['detail-chip', statusTone()]">{{ statusLabel() }}</span>
+      </div>
+      <button type="button" class="icon-btn" (click)="close()" aria-label="Kapat">×</button>
+    </div>
+
+    <div class="detail-body-wrap">
+      <h2 class="detail-title">{{ announcement().title }}</h2>
+      <p class="detail-meta">
+        {{ announcement().authorDisplayName || announcement().authorEmail }}
+        · Oluşturulma:
+        {{ toLocalDate(announcement().createdDate) | date: 'dd MMM yyyy, HH:mm' }}
+      </p>
+      @if (announcement().publishedAt) {
+        <p class="detail-meta">
+          Yayınlanma:
+          {{ toLocalDate(announcement().publishedAt!) | date: 'dd MMM yyyy, HH:mm' }}
+        </p>
+      }
+      @if (announcement().scheduledPublishAt && !announcement().publishedAt) {
+        <p class="detail-meta">
+          Planlanan yayın:
+          {{ toLocalDate(announcement().scheduledPublishAt!) | date: 'dd MMM yyyy, HH:mm' }}
+        </p>
+      }
+
+      <div class="detail-content">{{ announcement().body }}</div>
+
+      @if (canPublishNow() || canDelete()) {
+        <div class="detail-actions">
+          @if (canPublishNow()) {
+            <button type="button" class="primary-btn" [disabled]="publishing()" (click)="publishAnnouncement()">
+              {{ publishing() ? 'Yayınlanıyor...' : 'Şimdi yayınla' }}
+            </button>
+          }
+          @if (canDelete()) {
+            <button type="button" class="danger-btn" [disabled]="deleting()" (click)="deleteAnnouncement()">
+              {{ deleting() ? 'Siliniyor...' : 'Duyuruyu sil' }}
+            </button>
+          }
+        </div>
+      }
+    </div>
+  </section>
+</div>

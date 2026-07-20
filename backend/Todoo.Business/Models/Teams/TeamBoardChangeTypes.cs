@@ -14,4 +14,6 @@ public static class TeamBoardChangeTypes
     public const string ColumnsReordered = "columns-reordered";
     public const string BoardCreated = "board-created";
     public const string BoardDeleted = "board-deleted";
+    public const string AnnouncementPublished = "announcement-published";
+    public const string AnnouncementChanged = "announcement-changed";
 }

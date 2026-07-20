@@ -277,6 +277,23 @@ export class AppLayout implements OnInit, OnDestroy {
     this.notificationService.markAllRead().subscribe();
   }
 
+  clearAllNotifications(event: Event): void {
+    event.stopPropagation();
+    this.notifMenuOpen.set(false);
+    if (this.notifications().length === 0) {
+      return;
+    }
+    if (!window.confirm('Tüm bildirimler silinecek. Emin misiniz?')) {
+      return;
+    }
+    this.notificationService.clear().subscribe();
+  }
+
+  deleteNotification(item: AppNotification, event: Event): void {
+    event.stopPropagation();
+    this.notificationService.delete(item.id).subscribe();
+  }
+
   markNotificationRead(item: AppNotification, event: Event): void {
     event.stopPropagation();
     if (item.isRead) {
@@ -293,6 +310,13 @@ export class AppLayout implements OnInit, OnDestroy {
 
     if (!item.isRead) {
       this.notificationService.markRead(item.id).subscribe();
+    }
+
+    if (item.type === 'Announcement' && item.teamId) {
+      void this.router.navigate(['/teams', item.teamId, 'announcements'], {
+        queryParams: item.announcementId ? { announcementId: item.announcementId } : undefined
+      });
+      return;
     }
 
     if (item.teamId && item.boardId && item.taskId) {

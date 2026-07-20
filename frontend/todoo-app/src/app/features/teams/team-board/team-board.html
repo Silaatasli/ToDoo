@@ -142,6 +142,7 @@
 
       <div class="board-actions">
         @if (teamId()) {
+          <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'announcements']">Duyurular</a>
           <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'reports']">Reports</a>
         }
         <button type="button" class="secondary-btn" (click)="openMembersModal()">Üyeler</button>

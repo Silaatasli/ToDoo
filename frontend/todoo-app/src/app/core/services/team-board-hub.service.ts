@@ -10,6 +10,7 @@ export interface BoardChangedEvent {
   changeType: string;
   actorUserId?: number | null;
   taskId?: number | null;
+  announcementId?: number | null;
 }
 
 export interface TaskDragEvent {

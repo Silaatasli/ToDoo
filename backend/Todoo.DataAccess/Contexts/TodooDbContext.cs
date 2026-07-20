@@ -20,6 +20,7 @@ public class TodooDbContext : DbContext
     public DbSet<TaskAttachment> TaskAttachments => Set<TaskAttachment>();
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<CommentAttachment> CommentAttachments => Set<CommentAttachment>();
+    public DbSet<TeamAnnouncement> TeamAnnouncements => Set<TeamAnnouncement>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -260,6 +261,31 @@ public class TodooDbContext : DbContext
             .WithMany()
             .HasForeignKey(attachment => attachment.UploadedByUserId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TeamAnnouncement>()
+            .Property(announcement => announcement.Title)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        modelBuilder.Entity<TeamAnnouncement>()
+            .Property(announcement => announcement.Body)
+            .HasMaxLength(4000)
+            .IsRequired();
+
+        modelBuilder.Entity<TeamAnnouncement>()
+            .HasOne(announcement => announcement.Team)
+            .WithMany(team => team.Announcements)
+            .HasForeignKey(announcement => announcement.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<TeamAnnouncement>()
+            .HasOne(announcement => announcement.Author)
+            .WithMany()
+            .HasForeignKey(announcement => announcement.AuthorUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TeamAnnouncement>()
+            .HasIndex(announcement => new { announcement.TeamId, announcement.CreatedDate });
 
         modelBuilder.Entity<Category>()
             .Property(category => category.Name)

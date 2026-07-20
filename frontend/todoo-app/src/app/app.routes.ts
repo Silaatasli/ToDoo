@@ -6,6 +6,7 @@ import { Register } from './features/auth/register/register';
 import { ResetPassword } from './features/auth/reset-password/reset-password';
 import { Profile } from './features/profile/profile';
 import { TeamReports } from './features/reports/team-reports';
+import { TeamAnnouncementsPage } from './features/teams/team-announcements/team-announcements';
 import { TeamBoard } from './features/teams/team-board/team-board';
 import { TeamList } from './features/teams/team-list/team-list';
 
@@ -18,6 +19,7 @@ export const routes: Routes = [
   { path: 'teams', component: TeamList, canActivate: [authGuard] },
   { path: 'teams/:id/boards/:boardId', component: TeamBoard, canActivate: [authGuard] },
   { path: 'teams/:id/board', component: TeamBoard, canActivate: [authGuard] },
+  { path: 'teams/:id/announcements', component: TeamAnnouncementsPage, canActivate: [authGuard] },
   { path: 'teams/:id/reports', component: TeamReports, canActivate: [authGuard] },
   { path: 'profile', component: Profile, canActivate: [authGuard] },
   { path: 'profile/:id', component: Profile, canActivate: [authGuard] },
