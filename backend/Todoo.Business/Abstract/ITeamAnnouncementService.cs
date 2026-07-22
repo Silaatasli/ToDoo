@@ -22,4 +22,6 @@ public interface ITeamAnnouncementService
     Task<ServiceResult> SetPublishPermissionAsync(int teamId, int memberUserId, bool canPublish, int actorUserId);
 
     Task<int> PublishDueScheduledAsync(CancellationToken cancellationToken = default);
+
+    Task<DateTime?> GetNextScheduledPublishAtUtcAsync(CancellationToken cancellationToken = default);
 }

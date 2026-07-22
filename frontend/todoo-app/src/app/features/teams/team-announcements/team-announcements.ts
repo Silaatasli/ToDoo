@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
+import { NotificationService } from '../../../core/services/notification.service';
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
 import { TeamService } from '../../../core/services/team.service';
 import {
@@ -29,6 +30,7 @@ export class TeamAnnouncementsPage implements OnInit {
   private readonly teamService = inject(TeamService);
   private readonly auth = inject(AuthService);
   private readonly boardHub = inject(TeamBoardHubService);
+  private readonly notificationService = inject(NotificationService);
   private readonly fb = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -94,7 +96,7 @@ export class TeamAnnouncementsPage implements OnInit {
     this.form.controls.publishMode.valueChanges
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((mode) => {
-        if (mode === 'Now') {
+        if (mode === 'Now' || mode === 'Draft') {
           this.form.controls.scheduledPublishAt.setValue('');
         }
       });
@@ -130,6 +132,8 @@ export class TeamAnnouncementsPage implements OnInit {
         if (id != null) {
           this.refreshAnnouncements(id);
         }
+        // Liste/popup SignalR bildirim hub'indan gelir; yedek olarak listeyi tazele.
+        this.notificationService.load();
       }
     });
 
@@ -232,15 +236,15 @@ export class TeamAnnouncementsPage implements OnInit {
     this.publishing.set(true);
     this.publishError.set(null);
 
-    const shouldSendSchedule =
-      (publishMode === 'Schedule' || publishMode === 'Draft') && !!scheduledPublishAt;
-
     this.teamService
       .createAnnouncement(id, {
         title: title.trim(),
         body: body.trim(),
         publishMode,
-        scheduledPublishAt: shouldSendSchedule ? this.toUtcIsoFromLocalInput(scheduledPublishAt) : null
+        scheduledPublishAt:
+          publishMode === 'Schedule' && scheduledPublishAt
+            ? this.toUtcIsoFromLocalInput(scheduledPublishAt)
+            : null
       })
       .subscribe({
         next: (created) => {
@@ -398,7 +402,7 @@ export class TeamAnnouncementsPage implements OnInit {
         return;
       }
       this.refreshAnnouncements(id);
-    }, 10000);
+    }, 3000);
   }
 
   private stopSchedulePolling(): void {

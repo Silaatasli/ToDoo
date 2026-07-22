@@ -101,13 +101,27 @@ export class NotificationService {
   }
 
   pushRealtime(notification: AppNotification, unreadCount: number): void {
+    if (!notification?.id) {
+      return;
+    }
+
     this.unreadCount.set(unreadCount);
-    this.items.update((list) => [notification, ...list.filter((item) => item.id !== notification.id)].slice(0, 50));
+    this.items.update((list) => {
+      if (list.some((item) => item.id === notification.id)) {
+        return list;
+      }
+      return [notification, ...list].slice(0, 50);
+    });
     this.showToast(notification);
   }
 
   showToast(notification: AppNotification): void {
-    this.toasts.update((list) => [notification, ...list].slice(0, 3));
+    this.toasts.update((list) => {
+      if (list.some((item) => item.id === notification.id)) {
+        return list;
+      }
+      return [notification, ...list].slice(0, 3);
+    });
     window.setTimeout(() => this.dismissToast(notification.id), 5000);
   }
 

@@ -6,11 +6,14 @@ using Todoo.Business.Abstract;
 namespace Todoo.Business.Concrete;
 
 /// <summary>
-/// Zamanlanmis duyurulari periyodik kontrol edip yayinlar ve bildirim gonderir.
+/// Zamanlanmis duyurulari kontrol edip yayinlar.
+/// Vade yakinsa tam saatte uyanir; yeni zamanlamalar icin en fazla 1 sn'de bir tarar.
 /// </summary>
 public class AnnouncementScheduleHostedService : BackgroundService
 {
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan IdlePollInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaxWaitForNext = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan DueRetryDelay = TimeSpan.FromMilliseconds(100);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<AnnouncementScheduleHostedService> _logger;
@@ -25,8 +28,11 @@ public class AnnouncementScheduleHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Uygulama ayaga kalkinca hemen bir tur bak.
         while (!stoppingToken.IsCancellationRequested)
         {
+            var delay = IdlePollInterval;
+
             try
             {
                 using var scope = _scopeFactory.CreateScope();
@@ -36,6 +42,8 @@ public class AnnouncementScheduleHostedService : BackgroundService
                 {
                     _logger.LogInformation("{Count} zamanlanmis duyuru yayinlandi.", publishedCount);
                 }
+
+                delay = await ResolveDelayAsync(announcementService, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -44,16 +52,36 @@ public class AnnouncementScheduleHostedService : BackgroundService
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Zamanlanmis duyuru yayini kontrolu basarisiz.");
+                delay = IdlePollInterval;
             }
 
             try
             {
-                await Task.Delay(PollInterval, stoppingToken);
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
         }
+    }
+
+    private static async Task<TimeSpan> ResolveDelayAsync( // Zamanlanmis duyurulari yayinlamak icin ne kadar bekleyecegimizi hesapla.
+        ITeamAnnouncementService announcementService,
+        CancellationToken stoppingToken)
+    {
+        var nextAt = await announcementService.GetNextScheduledPublishAtUtcAsync(stoppingToken);
+        if (!nextAt.HasValue)
+        {
+            return IdlePollInterval;
+        }
+
+        var until = nextAt.Value - DateTime.UtcNow;
+        if (until <= TimeSpan.Zero)
+        {
+            return DueRetryDelay;
+        }
+
+        return until < MaxWaitForNext ? until : MaxWaitForNext;
     }
 }

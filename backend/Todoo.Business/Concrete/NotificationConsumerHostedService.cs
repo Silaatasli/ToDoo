@@ -133,6 +133,13 @@ public class NotificationConsumerHostedService : BackgroundService
                 return;
             }
 
+            // Dispatch zaten Redis + SignalR yaptıysa tekrar yazma (cift bildirim olmasin).
+            if (message.DirectDelivered)
+            {
+                await _channel.BasicAckAsync(args.DeliveryTag, false);
+                return;
+            }
+
             using var scope = _scopeFactory.CreateScope();
             var store = scope.ServiceProvider.GetRequiredService<INotificationStore>();
             var realtime = scope.ServiceProvider.GetRequiredService<IRealtimeNotificationSender>();

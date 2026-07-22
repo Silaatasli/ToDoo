@@ -26,4 +26,6 @@ public class NotificationMessage
     public int? AnnouncementId { get; set; }
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
+
+    public bool DirectDelivered { get; set; }
 }

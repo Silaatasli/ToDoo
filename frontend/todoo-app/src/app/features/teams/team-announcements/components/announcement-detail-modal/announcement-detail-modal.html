@@ -3,32 +3,41 @@
     <div class="modal-header">
       <div class="detail-header-meta">
         <span class="detail-issue-key">Duyuru #{{ announcement().id }}</span>
-        <span class="detail-chip" [class]="['detail-chip', statusTone()]">{{ statusLabel() }}</span>
+        <span class="detail-chip" [class]="statusTone()">{{ statusLabel() }}</span>
       </div>
       <button type="button" class="icon-btn" (click)="close()" aria-label="Kapat">×</button>
     </div>
 
     <div class="detail-body-wrap">
       <h2 class="detail-title">{{ announcement().title }}</h2>
-      <p class="detail-meta">
-        {{ announcement().authorDisplayName || announcement().authorEmail }}
-        · Oluşturulma:
-        {{ toLocalDate(announcement().createdDate) | date: 'dd MMM yyyy, HH:mm' }}
-      </p>
-      @if (announcement().publishedAt) {
-        <p class="detail-meta">
-          Yayınlanma:
-          {{ toLocalDate(announcement().publishedAt!) | date: 'dd MMM yyyy, HH:mm' }}
-        </p>
-      }
-      @if (announcement().scheduledPublishAt && !announcement().publishedAt) {
-        <p class="detail-meta">
-          Planlanan yayın:
-          {{ toLocalDate(announcement().scheduledPublishAt!) | date: 'dd MMM yyyy, HH:mm' }}
-        </p>
-      }
 
-      <div class="detail-content">{{ announcement().body }}</div>
+      <div class="detail-meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Yazar</span>
+          <span class="meta-value">{{ announcement().authorDisplayName || announcement().authorEmail }}</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Oluşturulma</span>
+          <span class="meta-value">{{ toLocalDate(announcement().createdDate) | date: 'dd MMM yyyy, HH:mm' }}</span>
+        </div>
+        @if (announcement().publishedAt) {
+          <div class="meta-item">
+            <span class="meta-label">Yayınlanma</span>
+            <span class="meta-value">{{ toLocalDate(announcement().publishedAt!) | date: 'dd MMM yyyy, HH:mm' }}</span>
+          </div>
+        }
+        @if (announcement().scheduledPublishAt && !announcement().publishedAt) {
+          <div class="meta-item">
+            <span class="meta-label">Planlanan yayın</span>
+            <span class="meta-value">{{ toLocalDate(announcement().scheduledPublishAt!) | date: 'dd MMM yyyy, HH:mm' }}</span>
+          </div>
+        }
+      </div>
+
+      <div class="detail-content">
+        <h3 class="content-label">Mesaj</h3>
+        <div class="content-body">{{ announcement().body }}</div>
+      </div>
 
       @if (canPublishNow() || canDelete()) {
         <div class="detail-actions">

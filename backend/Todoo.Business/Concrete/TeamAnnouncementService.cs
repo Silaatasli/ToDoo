@@ -111,16 +111,16 @@ public class TeamAnnouncementService : ITeamAnnouncementService
 
             status = AnnouncementStatus.Scheduled;
         }
-        else if (mode == "Draft" && scheduledPublishAt.HasValue)
+        else if (mode == "Draft")
         {
-            // Taslak + yayin tarihi => zamanlanmis duyuru
-            scheduledUtc = ToUtc(scheduledPublishAt.Value);
-            if (scheduledUtc <= DateTime.UtcNow.AddMinutes(-1))
+            // Taslak sadece Draft; zamanlama ayri Schedule modu ile yapilir.
+            if (scheduledPublishAt.HasValue)
             {
-                return ServiceResult<TeamAnnouncementDto>.Fail("Yayin tarihi gelecekte olmalidir.");
+                return ServiceResult<TeamAnnouncementDto>.Fail(
+                    "Taslak duyuruya yayin tarihi eklenemez. Zamanlamak icin Schedule modunu kullanin.");
             }
 
-            status = AnnouncementStatus.Scheduled;
+            status = AnnouncementStatus.Draft;
         }
 
         var announcement = new TeamAnnouncement
@@ -271,21 +271,37 @@ public class TeamAnnouncementService : ITeamAnnouncementService
             cancellationToken.ThrowIfCancellationRequested();
 
             announcement.Status = AnnouncementStatus.Published;
-            announcement.PublishedAt = now;
+            announcement.PublishedAt = DateTime.UtcNow;
             announcement.ScheduledPublishAt = null;
             _unitOfWork.TeamAnnouncements.Update(announcement);
             await _unitOfWork.SaveChangesAsync();
 
-            // Zamanlanmis yayinda yayinciya da bildirim gitsin; UI SignalR ile aninda guncellenir.
+            // Yayinciya bildirim gitmez; diger takim uyelerine gider.
             await NotifyPublishedAsync(
                 announcement.TeamId,
                 announcement.AuthorUserId,
                 announcement,
-                includeActor: true);
+                includeActor: false);
             publishedCount++;
         }
 
         return publishedCount;
+    }
+
+    public async Task<DateTime?> GetNextScheduledPublishAtUtcAsync(CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var next = (await _unitOfWork.TeamAnnouncements.GetAllAsync())
+            .Where(item =>
+                item.Status == AnnouncementStatus.Scheduled
+                && item.ScheduledPublishAt.HasValue)
+            .Select(item => item.ScheduledPublishAt!.Value)
+            .OrderBy(at => at)
+            .Cast<DateTime?>()
+            .FirstOrDefault();
+
+        return next;
     }
 
     private async Task NotifyPublishedAsync(
@@ -294,12 +310,17 @@ public class TeamAnnouncementService : ITeamAnnouncementService
         TeamAnnouncement announcement,
         bool includeActor)
     {
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
         var memberIds = (await _unitOfWork.TeamMembers.GetAllAsync())
             .Where(member => member.TeamId == teamId)
             .Select(member => member.UserId)
-            .ToList();
+            .ToHashSet();
 
-        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        if (team is not null)
+        {
+            memberIds.Add(team.LeaderUserId);
+        }
+
         var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId);
         var teamName = team?.Name ?? string.Empty;
         var actorDisplayName = actor is null ? string.Empty : UserDisplayNameHelper.Format(actor);
@@ -395,20 +416,14 @@ public class TeamAnnouncementService : ITeamAnnouncementService
 
     private static DateTime ToUtc(DateTime value)
     {
-        // JSON deserializer often yields Unspecified even for Z-suffixed values.
-        // Prefer preserving UTC wall-clock when Kind is already Utc; otherwise treat as local.
-        if (value.Kind == DateTimeKind.Utc)
+        // Frontend toISOString() ile UTC gonderir. JSON bazen Kind=Unspecified getirse de
+        // deger UTC duvar saatidir; Local sanip tekrar cevirmek saati bozar.
+        return value.Kind switch
         {
-            return value;
-        }
-
-        if (value.Kind == DateTimeKind.Local)
-        {
-            return value.ToUniversalTime();
-        }
-
-        // Unspecified: assume the client sent a local wall-clock time.
-        return DateTime.SpecifyKind(value, DateTimeKind.Local).ToUniversalTime();
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 
     private static TeamAnnouncementDto MapToDto(TeamAnnouncement announcement, User? author)

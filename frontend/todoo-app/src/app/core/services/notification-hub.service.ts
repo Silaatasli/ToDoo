@@ -1,47 +1,58 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, NgZone, inject } from '@angular/core';
 import * as signalR from '@microsoft/signalr';
 import { AuthService } from './auth.service';
 import { NotificationService } from './notification.service';
 import { environment } from '../../../environments/environment';
-import { NotificationReceivedPayload } from '../../models/notification.model';
+import { AppNotification, NotificationReceivedPayload } from '../../models/notification.model';
 
 @Injectable({ providedIn: 'root' })
 export class NotificationHubService {
   private readonly auth = inject(AuthService);
   private readonly notifications = inject(NotificationService);
+  private readonly ngZone = inject(NgZone);
 
   private connection: signalR.HubConnection | null = null;
   private browserPermissionRequested = false;
+  private starting: Promise<void> | null = null;
+  private intentionallyStopped = false;
+  private lifecycleBound = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   async connect(): Promise<void> {
-    if (this.connection) {
+    if (!this.auth.isLoggedIn()) {
       return;
     }
 
-    this.connection = new signalR.HubConnectionBuilder()
-      .withUrl(environment.notificationHubUrl, {
-        accessTokenFactory: () => this.auth.getToken() ?? ''
-      })
-      .withAutomaticReconnect()
-      .build();
+    this.intentionallyStopped = false;
+    this.bindLifecycleListeners();
 
-    this.connection.on('NotificationReceived', (payload: NotificationReceivedPayload) => {
-      if (!payload?.notification) {
-        return;
-      }
+    if (this.connection?.state === signalR.HubConnectionState.Connected) {
+      return;
+    }
 
-      this.notifications.pushRealtime(payload.notification, payload.unreadCount ?? 0);
+    if (this.connection?.state === signalR.HubConnectionState.Connecting
+      || this.connection?.state === signalR.HubConnectionState.Reconnecting) {
+      return;
+    }
 
-      if (typeof document !== 'undefined' && document.hidden) {
-        this.showBrowserNotification(payload.notification.title, payload.notification.body, payload.notification);
-      }
-    });
+    if (this.starting) {
+      await this.starting;
+      return;
+    }
 
-    await this.connection.start();
-    void this.ensureBrowserPermission();
+    this.starting = this.startConnection();
+    try {
+      await this.starting;
+    } finally {
+      this.starting = null;
+    }
   }
 
   async disconnect(): Promise<void> {
+    this.intentionallyStopped = true;
+    this.clearReconnectTimer();
+    this.unbindLifecycleListeners();
+
     if (!this.connection) {
       return;
     }
@@ -53,6 +64,179 @@ export class NotificationHubService {
     } catch {
       // ignore
     }
+  }
+
+  private async startConnection(): Promise<void> {
+    if (this.connection) {
+      try {
+        await this.connection.stop();
+      } catch {
+        // ignore
+      }
+      this.connection = null;
+    }
+
+    this.connection = new signalR.HubConnectionBuilder()
+      .withUrl(environment.notificationHubUrl, {
+        accessTokenFactory: () => this.auth.getToken() ?? ''
+      })
+      .withAutomaticReconnect({
+        nextRetryDelayInMilliseconds: (retryContext) => {
+          // Sonsuz retry: 0, 2s, 5s, 10s, sonra max 30s aralikla devam
+          const delays = [0, 2000, 5000, 10000];
+          if (retryContext.previousRetryCount < delays.length) {
+            return delays[retryContext.previousRetryCount];
+          }
+          return 30000;
+        }
+      })
+      .build();
+
+    // Arka plan sekmelerinde tarayici throttle eder; timeout'u biraz genis tut
+    this.connection.serverTimeoutInMilliseconds = 60_000;
+    this.connection.keepAliveIntervalInMilliseconds = 15_000;
+
+    this.connection.on('NotificationReceived', (...args: unknown[]) => {
+      const payload = this.normalizePayload(args);
+      if (!payload?.notification) {
+        return;
+      }
+
+      this.ngZone.run(() => {
+        this.notifications.pushRealtime(payload.notification, payload.unreadCount ?? 0);
+      });
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.showBrowserNotification(payload.notification.title, payload.notification.body, payload.notification);
+      }
+    });
+
+    this.connection.onreconnected(() => {
+      // Grup uyelikleri sunucu OnConnectedAsync ile yenilenir.
+    });
+
+    this.connection.onclose(() => {
+      // Automatic reconnect tukendiginde (veya fatal close) buraya duser.
+      if (this.intentionallyStopped || !this.auth.isLoggedIn()) {
+        return;
+      }
+      this.scheduleManualReconnect();
+    });
+
+    try {
+      await this.connection.start();
+      void this.ensureBrowserPermission();
+    } catch {
+      this.connection = null;
+      if (!this.intentionallyStopped && this.auth.isLoggedIn()) {
+        this.scheduleManualReconnect();
+      }
+    }
+  }
+
+  private scheduleManualReconnect(): void {
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      void this.connect();
+    }, 5000);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+  }
+
+  private bindLifecycleListeners(): void {
+    if (this.lifecycleBound || typeof window === 'undefined') {
+      return;
+    }
+
+    this.lifecycleBound = true;
+    window.addEventListener('online', this.onOnline);
+    document.addEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private unbindLifecycleListeners(): void {
+    if (!this.lifecycleBound || typeof window === 'undefined') {
+      return;
+    }
+
+    this.lifecycleBound = false;
+    window.removeEventListener('online', this.onOnline);
+    document.removeEventListener('visibilitychange', this.onVisibilityChange);
+  }
+
+  private readonly onOnline = (): void => {
+    void this.ensureConnected();
+  };
+
+  private readonly onVisibilityChange = (): void => {
+    if (document.visibilityState === 'visible') {
+      void this.ensureConnected();
+    }
+  };
+
+  /** Sekme tekrar aktif / internet gelince bagli degilse yeniden baslat. */
+  private async ensureConnected(): Promise<void> {
+    if (this.intentionallyStopped || !this.auth.isLoggedIn()) {
+      return;
+    }
+
+    const state = this.connection?.state;
+    if (state === signalR.HubConnectionState.Connected
+      || state === signalR.HubConnectionState.Connecting
+      || state === signalR.HubConnectionState.Reconnecting) {
+      return;
+    }
+
+    this.clearReconnectTimer();
+    await this.connect();
+  }
+
+  private normalizePayload(args: unknown[]): NotificationReceivedPayload | null {
+    if (args.length === 0) {
+      return null;
+    }
+
+    const first = args[0];
+    if (first && typeof first === 'object') {
+      const record = first as Record<string, unknown>;
+      if (record['notification'] && typeof record['notification'] === 'object') {
+        return {
+          notification: this.normalizeNotification(record['notification']),
+          unreadCount: Number(record['unreadCount'] ?? 0)
+        };
+      }
+
+      // DTO dogrudan gonderildiyse
+      if (typeof record['id'] === 'string' && typeof record['title'] === 'string') {
+        return {
+          notification: this.normalizeNotification(record),
+          unreadCount: typeof args[1] === 'number' ? args[1] : 0
+        };
+      }
+    }
+
+    return null;
+  }
+
+  private normalizeNotification(raw: unknown): AppNotification {
+    const item = (raw ?? {}) as Record<string, unknown>;
+    return {
+      id: String(item['id'] ?? item['Id'] ?? ''),
+      type: String(item['type'] ?? item['Type'] ?? ''),
+      title: String(item['title'] ?? item['Title'] ?? ''),
+      body: String(item['body'] ?? item['Body'] ?? ''),
+      teamId: (item['teamId'] ?? item['TeamId'] ?? null) as number | null,
+      boardId: (item['boardId'] ?? item['BoardId'] ?? null) as number | null,
+      taskId: (item['taskId'] ?? item['TaskId'] ?? null) as number | null,
+      announcementId: (item['announcementId'] ?? item['AnnouncementId'] ?? null) as number | null,
+      isRead: Boolean(item['isRead'] ?? item['IsRead'] ?? false),
+      createdAtUtc: String(item['createdAtUtc'] ?? item['CreatedAtUtc'] ?? new Date().toISOString())
+    };
   }
 
   private async ensureBrowserPermission(): Promise<void> {

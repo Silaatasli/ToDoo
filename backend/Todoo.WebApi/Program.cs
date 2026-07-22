@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
@@ -174,7 +175,16 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             }));
 });
-builder.Services.AddSignalR();
+builder.Services.AddSignalR(options =>
+{
+    // Idle / arka plan sekmelerinde erken kopmayi azalt
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+}).AddJsonProtocol(options =>
+{
+    options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+});
+builder.Services.AddSingleton<IUserIdProvider, AppUserIdProvider>();
 builder.Services.AddSingleton<ITeamBoardNotifier, TeamBoardNotifier>();
 builder.Services.AddSingleton<IRealtimeNotificationSender, RealtimeNotificationSender>();
 builder.Services.AddSingleton<IFileStorageService, MinioFileStorageService>();

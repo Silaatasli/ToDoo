@@ -1,9 +1,12 @@
 <app-layout>
   <main class="announcements-page">
-    <header class="page-toolbar">
-      <h1>{{ team()?.name ?? 'Takım duyuruları' }}</h1>
+    <header class="page-header">
+      <div class="page-header-text">
+        <h1>{{ team()?.name ?? 'Takım duyuruları' }}</h1>
+        <p class="page-subtitle">Taslak kaydedin, hemen yayınlayın veya ileri bir tarihe planlayın.</p>
+      </div>
       @if (teamId()) {
-        <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">Panoya dön</a>
+        <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">← Panoya dön</a>
       }
     </header>
 
@@ -12,113 +15,156 @@
     } @else if (error()) {
       <div class="state-box error">{{ error() }}</div>
     } @else {
-      @if (canPublish()) {
-        <section class="compose-card">
-          <h2>Yeni Duyuru</h2>
-          <form [formGroup]="form" (ngSubmit)="submitAnnouncement()">
-            <label class="field">
-              <span>Başlık</span>
-              <input type="text" formControlName="title" maxlength="200" placeholder="Örn. Sprint planı" />
-            </label>
-            <label class="field">
-              <span>Mesaj</span>
-              <textarea formControlName="body" rows="4" maxlength="4000" placeholder="Takıma duyurmak istediğiniz metin..."></textarea>
-            </label>
+      <div class="page-grid">
+        <div class="page-main">
+          @if (canPublish()) {
+            <section class="compose-card">
+              <div class="section-head">
+                <div>
+                  <h2>Yeni duyuru</h2>
+                  <p class="section-hint">Takımına iletmek istediğin mesajı buradan hazırla.</p>
+                </div>
+              </div>
 
-            <fieldset class="publish-mode">
-              <legend>Yayınlama</legend>
-              <label class="mode-option">
-                <input type="radio" formControlName="publishMode" value="Draft" />
-                <span>Taslak kaydet</span>
-              </label>
-              <label class="mode-option">
-                <input type="radio" formControlName="publishMode" value="Now" />
-                <span>Şimdi yayınla</span>
-              </label>
-              <label class="mode-option">
-                <input type="radio" formControlName="publishMode" value="Schedule" />
-                <span>Zamanla</span>
-              </label>
-            </fieldset>
+              <form [formGroup]="form" (ngSubmit)="submitAnnouncement()">
+                <label class="field">
+                  <span>Başlık</span>
+                  <input type="text" formControlName="title" maxlength="200" placeholder="Örn. Sprint planı" />
+                </label>
+                <label class="field">
+                  <span>Mesaj</span>
+                  <textarea formControlName="body" rows="5" maxlength="4000" placeholder="Takıma duyurmak istediğiniz metin..."></textarea>
+                </label>
 
-            @if (form.controls.publishMode.value === 'Schedule' || form.controls.publishMode.value === 'Draft') {
-              <label class="field">
-                <span>
-                  Yayınlanma tarihi
-                  @if (form.controls.publishMode.value === 'Draft') {
-                    <span class="field-optional">(isteğe bağlı)</span>
+                <fieldset class="publish-mode">
+                  <legend>Yayınlama seçeneği</legend>
+                  <div class="mode-grid">
+                    <label class="mode-option" [class.is-selected]="form.controls.publishMode.value === 'Draft'">
+                      <input type="radio" formControlName="publishMode" value="Draft" />
+                      <span class="mode-title">Taslak</span>
+                      <span class="mode-desc">Sonra yayınla</span>
+                    </label>
+                    <label class="mode-option" [class.is-selected]="form.controls.publishMode.value === 'Now'">
+                      <input type="radio" formControlName="publishMode" value="Now" />
+                      <span class="mode-title">Şimdi</span>
+                      <span class="mode-desc">Hemen gönder</span>
+                    </label>
+                    <label class="mode-option" [class.is-selected]="form.controls.publishMode.value === 'Schedule'">
+                      <input type="radio" formControlName="publishMode" value="Schedule" />
+                      <span class="mode-title">Zamanla</span>
+                      <span class="mode-desc">Tarih seç</span>
+                    </label>
+                  </div>
+                </fieldset>
+
+                @if (form.controls.publishMode.value === 'Schedule') {
+                  <label class="field schedule-field">
+                    <span>Yayınlanma tarihi</span>
+                    <input type="datetime-local" formControlName="scheduledPublishAt" />
+                  </label>
+                }
+
+                @if (publishError()) {
+                  <p class="inline-error">{{ publishError() }}</p>
+                }
+
+                <div class="form-actions">
+                  <button type="submit" class="primary-btn" [disabled]="publishing() || form.invalid">
+                    @if (publishing()) {
+                      Kaydediliyor...
+                    } @else if (form.controls.publishMode.value === 'Draft') {
+                      Taslak kaydet
+                    } @else if (form.controls.publishMode.value === 'Schedule') {
+                      Zamanla
+                    } @else {
+                      Duyuruyu yayınla
+                    }
+                  </button>
+                </div>
+              </form>
+            </section>
+          }
+
+          <section class="announcement-list-section">
+            <div class="section-head list-head">
+              <div>
+                <h2>Duyurular</h2>
+                <p class="section-hint">Takımdaki kayıtlı duyuruların listesi.</p>
+              </div>
+              <span class="count-chip">{{ announcements().length }}</span>
+            </div>
+
+            @if (announcements().length === 0) {
+              <div class="empty-state">
+                <div class="empty-icon" aria-hidden="true"></div>
+                <h3>Henüz duyuru yok</h3>
+                <p>
+                  @if (canPublish()) {
+                    İlk duyurunu yukarıdaki formdan oluşturabilirsin.
+                  } @else {
+                    Takım lideri veya yetkili üye duyuru paylaştığında burada görünecek.
                   }
-                </span>
-                <input type="datetime-local" formControlName="scheduledPublishAt" />
-              </label>
+                </p>
+              </div>
+            } @else {
+              <ul class="announcement-list">
+                @for (item of announcements(); track item.id) {
+                  <li>
+                    <button
+                      type="button"
+                      class="announcement-card"
+                      [class]="statusTone(item.status)"
+                      (click)="openAnnouncementDetail(item)"
+                    >
+                      <span class="card-main">
+                        <span class="card-title-row">
+                          <strong>{{ item.title }}</strong>
+                          <span class="status-badge" [class]="statusTone(item.status)">{{ statusLabel(item.status) }}</span>
+                        </span>
+                        <span class="meta">{{ listMeta(item) }}</span>
+                        <span class="preview">{{ previewBody(item.body) }}</span>
+                      </span>
+                      <span class="card-chevron" aria-hidden="true">›</span>
+                    </button>
+                  </li>
+                }
+              </ul>
             }
+          </section>
+        </div>
 
-            @if (publishError()) {
-              <p class="inline-error">{{ publishError() }}</p>
-            }
-            <button type="submit" class="primary-btn" [disabled]="publishing() || form.invalid">
-              @if (publishing()) {
-                Kaydediliyor...
-              } @else if (form.controls.publishMode.value === 'Draft' && form.controls.scheduledPublishAt.value) {
-                Zamanla
-              } @else if (form.controls.publishMode.value === 'Draft') {
-                Taslak kaydet
-              } @else if (form.controls.publishMode.value === 'Schedule') {
-                Zamanla
-              } @else {
-                Duyuruyu yayınla
-              }
-            </button>
-          </form>
-        </section>
-      }
-
-      @if (isLeader() && permissionMembers().length > 0) {
-        <section class="permission-card">
-          <h2>Yayınlama yetkisi</h2>
-          <p class="permission-hint">Üyelerin duyuru yayınlamasına izin verin.</p>
-          <ul class="permission-list">
-            @for (member of permissionMembers(); track member.userId) {
-              <li>
-                <span>{{ memberName(member) }}</span>
-                <button
-                  type="button"
-                  class="permission-toggle"
-                  [class.is-on]="member.canPublishAnnouncements"
-                  [disabled]="permissionBusyUserId() === member.userId"
-                  (click)="togglePublishPermission(member)"
-                >
-                  {{ member.canPublishAnnouncements ? 'Yetkili' : 'Yetki ver' }}
-                </button>
-              </li>
-            }
-          </ul>
-        </section>
-      }
-
-      <section class="announcement-list-section">
-        <h2>Duyurular</h2>
-        @if (announcements().length === 0) {
-          <div class="state-box muted">Henüz duyuru yok.</div>
-        } @else {
-          <ul class="announcement-list">
-            @for (item of announcements(); track item.id) {
-              <li>
-                <button type="button" class="announcement-card" (click)="openAnnouncementDetail(item)">
-                  <span class="card-main">
-                    <span class="card-title-row">
-                      <strong>{{ item.title }}</strong>
-                      <span class="status-badge" [class]="['status-badge', statusTone(item.status)]">{{ statusLabel(item.status) }}</span>
-                    </span>
-                    <span class="meta">{{ listMeta(item) }}</span>
-                    <span class="preview">{{ previewBody(item.body) }}</span>
-                  </span>
-                </button>
-              </li>
-            }
-          </ul>
+        @if (isLeader() && permissionMembers().length > 0) {
+          <aside class="page-side">
+            <section class="permission-card">
+              <div class="section-head">
+                <div>
+                  <h2>Yayınlama yetkisi</h2>
+                  <p class="section-hint">Üyelerin duyuru yayınlamasına izin verin.</p>
+                </div>
+              </div>
+              <ul class="permission-list">
+                @for (member of permissionMembers(); track member.userId) {
+                  <li>
+                    <div class="member-info">
+                      <span class="member-avatar" aria-hidden="true">{{ memberName(member).charAt(0).toUpperCase() }}</span>
+                      <span class="member-name">{{ memberName(member) }}</span>
+                    </div>
+                    <button
+                      type="button"
+                      class="permission-toggle"
+                      [class.is-on]="member.canPublishAnnouncements"
+                      [disabled]="permissionBusyUserId() === member.userId"
+                      (click)="togglePublishPermission(member)"
+                    >
+                      {{ member.canPublishAnnouncements ? 'Yetkili' : 'Yetki ver' }}
+                    </button>
+                  </li>
+                }
+              </ul>
+            </section>
+          </aside>
         }
-      </section>
+      </div>
     }
   </main>
 </app-layout>
