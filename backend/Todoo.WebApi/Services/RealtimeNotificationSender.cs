@@ -26,12 +26,10 @@ public class RealtimeNotificationSender : IRealtimeNotificationSender
 
         try
         {
-            // IUserIdProvider ile eslesen online baglantilar
             await _hubContext.Clients
                 .User(userKey)
                 .SendAsync("NotificationReceived", payload);
 
-            // Ayni kullanicinin group aboneligi (eski baglantilar / yedek)
             await _hubContext.Clients
                 .Group(NotificationHub.UserGroup(userId))
                 .SendAsync("NotificationReceived", payload);
@@ -39,6 +37,33 @@ public class RealtimeNotificationSender : IRealtimeNotificationSender
         catch (Exception ex)
         {
             _logger.LogError(ex, "SignalR bildirim gonderilemedi. UserId={UserId}", userId);
+            throw;
+        }
+    }
+
+    public async Task SendToTeamAsync(int teamId, NotificationItemDto notification, int? excludeUserId = null)
+    {
+        var payload = new
+        {
+            notification,
+            teamId,
+            excludeUserId
+        };
+
+        try
+        {
+            await _hubContext.Clients
+                .Group(NotificationHub.TeamGroup(teamId))
+                .SendAsync("TeamNotificationReceived", payload);
+
+            _logger.LogDebug(
+                "Takim bildirimi broadcast edildi. TeamId={TeamId}, Type={Type}",
+                teamId,
+                notification.Type);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "SignalR takim bildirimi gonderilemedi. TeamId={TeamId}", teamId);
             throw;
         }
     }

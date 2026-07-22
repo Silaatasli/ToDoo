@@ -4,7 +4,7 @@ namespace Todoo.Business.Models.Teams;
 
 public class TeamAnnouncementDto
 {
-    public int Id { get; set; }
+    public int Id { get; set; } // duyuru id
 
     public int TeamId { get; set; }
 

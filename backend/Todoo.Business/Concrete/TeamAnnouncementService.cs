@@ -111,16 +111,16 @@ public class TeamAnnouncementService : ITeamAnnouncementService
 
             status = AnnouncementStatus.Scheduled;
         }
-        else if (mode == "Draft")
+        else if (mode == "Draft" && scheduledPublishAt.HasValue)
         {
-            // Taslak sadece Draft; zamanlama ayri Schedule modu ile yapilir.
-            if (scheduledPublishAt.HasValue)
+            // Taslak + yayin tarihi => zamanlanmis duyuru
+            scheduledUtc = ToUtc(scheduledPublishAt.Value);
+            if (scheduledUtc <= DateTime.UtcNow.AddMinutes(-1))
             {
-                return ServiceResult<TeamAnnouncementDto>.Fail(
-                    "Taslak duyuruya yayin tarihi eklenemez. Zamanlamak icin Schedule modunu kullanin.");
+                return ServiceResult<TeamAnnouncementDto>.Fail("Yayin tarihi gelecekte olmalidir.");
             }
 
-            status = AnnouncementStatus.Draft;
+            status = AnnouncementStatus.Scheduled;
         }
 
         var announcement = new TeamAnnouncement
@@ -288,7 +288,7 @@ public class TeamAnnouncementService : ITeamAnnouncementService
         return publishedCount;
     }
 
-    public async Task<DateTime?> GetNextScheduledPublishAtUtcAsync(CancellationToken cancellationToken = default)
+    public async Task<DateTime?> GetNextScheduledPublishAtUtcAsync(CancellationToken cancellationToken = default) 
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -310,7 +310,7 @@ public class TeamAnnouncementService : ITeamAnnouncementService
         TeamAnnouncement announcement,
         bool includeActor)
     {
-        var team = await _unitOfWork.Teams.GetByIdAsync(teamId);
+        var team = await _unitOfWork.Teams.GetByIdAsync(teamId); 
         var memberIds = (await _unitOfWork.TeamMembers.GetAllAsync())
             .Where(member => member.TeamId == teamId)
             .Select(member => member.UserId)

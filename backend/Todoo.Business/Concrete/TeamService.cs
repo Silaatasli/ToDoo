@@ -658,6 +658,15 @@ public class TeamService : ITeamService
             .Any(member => member.TeamId == teamId && member.UserId == userId);
     }
 
+    public async Task<IReadOnlyList<int>> GetTeamIdsForUserAsync(int userId)
+    {
+        return (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.UserId == userId)
+            .Select(member => member.TeamId)
+            .Distinct()
+            .ToList();
+    }
+
     public async Task<int> EnsurePersonalTeamAsync(int userId)
     {
         var existingTeam = (await _unitOfWork.Teams.GetAllAsync())

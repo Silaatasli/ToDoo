@@ -106,13 +106,41 @@ export class NotificationHubService {
         this.notifications.pushRealtime(payload.notification, payload.unreadCount ?? 0);
       });
 
+      // Yeni takima eklendiyse notification hub takim grubuna da katil.
+      if (payload.notification.type === 'TeamMemberAdded' && payload.notification.teamId != null) {
+        void this.invokeJoinTeam(payload.notification.teamId);
+      }
+
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.showBrowserNotification(payload.notification.title, payload.notification.body, payload.notification);
+      }
+    });
+
+    // Takim broadcast (duyuru vb.): tek SignalR mesaji, inbox Redis'te kisiye ozel.
+    this.connection.on('TeamNotificationReceived', (...args: unknown[]) => {
+      const payload = this.normalizeTeamPayload(args);
+      if (!payload?.notification) {
+        return;
+      }
+
+      const myId = this.auth.getUserId();
+      if (payload.excludeUserId != null && myId != null && payload.excludeUserId === myId) {
+        return;
+      }
+
+      this.ngZone.run(() => {
+        this.notifications.load();
+        this.notifications.showToast(payload.notification);
+      });
+
       if (typeof document !== 'undefined' && document.hidden) {
         this.showBrowserNotification(payload.notification.title, payload.notification.body, payload.notification);
       }
     });
 
     this.connection.onreconnected(() => {
-      // Grup uyelikleri sunucu OnConnectedAsync ile yenilenir.
+      // OnConnectedAsync takim gruplarini yeniden ekler; ekstra guvence:
+      void this.invokeRefreshTeamGroups();
     });
 
     this.connection.onclose(() => {
@@ -221,6 +249,55 @@ export class NotificationHubService {
     }
 
     return null;
+  }
+
+  private normalizeTeamPayload(args: unknown[]): {
+    notification: AppNotification;
+    teamId: number | null;
+    excludeUserId: number | null;
+  } | null {
+    if (args.length === 0 || !args[0] || typeof args[0] !== 'object') {
+      return null;
+    }
+
+    const record = args[0] as Record<string, unknown>;
+    const notificationRaw = record['notification'] ?? record['Notification'];
+    if (!notificationRaw || typeof notificationRaw !== 'object') {
+      return null;
+    }
+
+    const excludeRaw = record['excludeUserId'] ?? record['ExcludeUserId'];
+    const teamRaw = record['teamId'] ?? record['TeamId'];
+
+    return {
+      notification: this.normalizeNotification(notificationRaw),
+      teamId: teamRaw == null ? null : Number(teamRaw),
+      excludeUserId: excludeRaw == null || excludeRaw === '' ? null : Number(excludeRaw)
+    };
+  }
+
+  private async invokeJoinTeam(teamId: number): Promise<void> {
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      return;
+    }
+
+    try {
+      await this.connection.invoke('JoinTeam', teamId);
+    } catch {
+      // ignore
+    }
+  }
+
+  private async invokeRefreshTeamGroups(): Promise<void> {
+    if (!this.connection || this.connection.state !== signalR.HubConnectionState.Connected) {
+      return;
+    }
+
+    try {
+      await this.connection.invoke('RefreshTeamGroups');
+    } catch {
+      // ignore
+    }
   }
 
   private normalizeNotification(raw: unknown): AppNotification {

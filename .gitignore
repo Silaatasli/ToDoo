@@ -1,6 +1,7 @@
 ## --------- .NET (Backend) Çöpleri ---------
 bin/
 obj/
+**/_buildcheck*/
 *.dll
 *.exe
 *.pdb

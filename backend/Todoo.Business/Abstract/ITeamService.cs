@@ -21,5 +21,6 @@ public interface ITeamService
     Task<ServiceResult> RemoveMemberAsync(int teamId, int memberUserId, int userId);
     Task<ServiceResult<IEnumerable<TaskActivityLogDto>>> GetTeamActivityAsync(int teamId, int userId);
     Task<bool> IsTeamMemberAsync(int teamId, int userId);
+    Task<IReadOnlyList<int>> GetTeamIdsForUserAsync(int userId);
     Task<int> EnsurePersonalTeamAsync(int userId);
 }

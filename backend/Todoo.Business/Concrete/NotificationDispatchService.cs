@@ -107,7 +107,7 @@ public class NotificationDispatchService
     }
 
     /// <summary>Takim duyurusu. Yayinciya bildirim gitmez (includeActor yalnizca ozel durumlar icin).</summary>
-    public Task NotifyAnnouncementAsync(
+    public async Task NotifyAnnouncementAsync(
         IEnumerable<int> memberUserIds,
         int actorUserId,
         int teamId,
@@ -140,7 +140,7 @@ public class NotificationDispatchService
                 teamId,
                 announcementId,
                 actorUserId);
-            return Task.CompletedTask;
+            return;
         }
 
         _logger.LogInformation(
@@ -149,7 +149,8 @@ public class NotificationDispatchService
             announcementId,
             recipients.Count);
 
-        var tasks = recipients.Select(userId => PublishSafeAsync(new NotificationMessage
+        // Inbox her kullanici icin ayri (okundu / unread kisiye ozel).
+        var storeTasks = recipients.Select(userId => StoreOnlyAsync(new NotificationMessage
         {
             Type = NotificationTypes.Announcement,
             TargetUserId = userId,
@@ -161,7 +162,34 @@ public class NotificationDispatchService
             DirectDelivered = true
         }));
 
-        return Task.WhenAll(tasks);
+        await Task.WhenAll(storeTasks);
+
+        // SignalR: takim grubuna tek broadcast (kisi kisi Clients.User yok).
+        try
+        {
+            await _realtime.SendToTeamAsync(
+                teamId,
+                new NotificationItemDto
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Type = NotificationTypes.Announcement,
+                    Title = announcementTitle,
+                    Body = Truncate(messageBody, 220),
+                    TeamId = teamId,
+                    AnnouncementId = announcementId,
+                    IsRead = false,
+                    CreatedAtUtc = DateTime.UtcNow
+                },
+                excludeUserId: includeActor ? null : actorUserId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Duyuru takim broadcast'i basarisiz. TeamId={TeamId}, AnnouncementId={AnnouncementId}",
+                teamId,
+                announcementId);
+        }
     }
 
     public Task NotifyMentionAsync(
@@ -236,6 +264,55 @@ public class NotificationDispatchService
             _logger.LogDebug(
                 ex,
                 "Bildirim kuyruga yazilamadi (dogrudan iletim basarili). Type={Type}, TargetUserId={TargetUserId}",
+                message.Type,
+                message.TargetUserId);
+        }
+    }
+
+    /// <summary>
+    /// Sadece Redis (+ istege bagli kuyruk). SignalR takim broadcast ile ayrica gider.
+    /// </summary>
+    private async Task StoreOnlyAsync(NotificationMessage message)
+    {
+        try
+        {
+            await _store.AddAsync(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Bildirim Redis'e yazilamadi. Type={Type}, TargetUserId={TargetUserId}",
+                message.Type,
+                message.TargetUserId);
+
+            try
+            {
+                message.DirectDelivered = false;
+                await _publisher.PublishAsync(message);
+            }
+            catch (Exception publishEx)
+            {
+                _logger.LogError(
+                    publishEx,
+                    "Bildirim kuyruga da yazilamadi. Type={Type}, TargetUserId={TargetUserId}",
+                    message.Type,
+                    message.TargetUserId);
+            }
+
+            return;
+        }
+
+        try
+        {
+            message.DirectDelivered = true;
+            await _publisher.PublishAsync(message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Bildirim kuyruga yazilamadi (Redis yazimi basarili). Type={Type}, TargetUserId={TargetUserId}",
                 message.Type,
                 message.TargetUserId);
         }
