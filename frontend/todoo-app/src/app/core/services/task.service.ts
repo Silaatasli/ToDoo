@@ -58,6 +58,10 @@ export class TaskService {
     return this.http.delete<void>(`${this.baseUrl}/${taskId}`);
   }
 
+  restore(taskId: number): Observable<TaskListItem> {
+    return this.http.post<TaskListItem>(`${this.baseUrl}/${taskId}/restore`, {});
+  }
+
   listAttachments(taskId: number): Observable<TaskAttachment[]> {
     return this.http.get<TaskAttachment[]>(`${this.baseUrl}/${taskId}/attachments`);
   }

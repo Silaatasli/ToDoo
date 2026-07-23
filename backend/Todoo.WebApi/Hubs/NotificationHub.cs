@@ -16,7 +16,7 @@ public class NotificationHub : Hub
     private readonly ITeamService _teamService;
     private readonly ILogger<NotificationHub> _logger;
 
-    public NotificationHub(ITeamService teamService, ILogger<NotificationHub> logger)
+    public NotificationHub(ITeamService teamService, ILogger<NotificationHub> logger) 
     {
         _teamService = teamService;
         _logger = logger;

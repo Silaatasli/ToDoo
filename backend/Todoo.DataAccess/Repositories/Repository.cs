@@ -19,9 +19,22 @@ public class Repository<T> : IRepository<T> where T : class
         return await _dbSet.ToListAsync();
     }
 
+    public async Task<List<T>> GetAllIgnoreFiltersAsync()
+    {
+        return await _dbSet.IgnoreQueryFilters().ToListAsync();
+    }
+
     public async Task<T?> GetByIdAsync(int id)
     {
-        return await _dbSet.FindAsync(id);
+        // FirstOrDefault applies global query filters (FindAsync does not).
+        return await _dbSet.FirstOrDefaultAsync(entity => EF.Property<int>(entity, "Id") == id);
+    }
+
+    public async Task<T?> GetByIdIgnoreFiltersAsync(int id)
+    {
+        return await _dbSet
+            .IgnoreQueryFilters()
+            .FirstOrDefaultAsync(entity => EF.Property<int>(entity, "Id") == id);
     }
 
     public void Add(T entity)
@@ -36,7 +49,7 @@ public class Repository<T> : IRepository<T> where T : class
 
     public async Task DeleteAsync(int id)
     {
-        var entity = await GetByIdAsync(id);
+        var entity = await GetByIdIgnoreFiltersAsync(id);
         if (entity is null)
         {
             return;

@@ -159,6 +159,15 @@ public class TodooDbContext : DbContext
             .HasForeignKey(task => task.CategoryId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<TaskItem>()
+            .HasOne(task => task.DeletedBy)
+            .WithMany()
+            .HasForeignKey(task => task.DeletedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TaskItem>()
+            .HasQueryFilter(task => task.DeletedAt == null);
+
         modelBuilder.Entity<TaskActivityLog>()
             .Property(log => log.OldValue)
             .HasMaxLength(500);

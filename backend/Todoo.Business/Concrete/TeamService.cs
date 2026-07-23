@@ -284,7 +284,7 @@ public class TeamService : ITeamService
             return ServiceResult.Fail("Takimin son panosu silinemez.");
         }
 
-        var tasks = (await _unitOfWork.TaskItems.GetAllAsync())
+        var tasks = (await _unitOfWork.TaskItems.GetAllIgnoreFiltersAsync())
             .Where(task => task.BoardId == boardId)
             .ToList();
         var taskIds = tasks.Select(task => task.Id).ToHashSet();

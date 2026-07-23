@@ -53,6 +53,13 @@ public class TaskItem
 
     public bool IsCompleted { get; set; }
 
+    public DateTime? DeletedAt { get; set; }
+
+    public int? DeletedByUserId { get; set; }
+
+    [JsonIgnore]
+    public User? DeletedBy { get; set; }
+
     [JsonIgnore]
     public ICollection<TaskActivityLog> ActivityLogs { get; set; } = [];
 

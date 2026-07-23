@@ -17,4 +17,5 @@ public interface ITaskService
     Task<ServiceResult<TaskListDto>> AcceptAssignmentAsync(int taskId, int userId);
     Task<ServiceResult<TaskListDto>> DeclineAssignmentAsync(int taskId, int userId);
     Task<ServiceResult> DeleteTaskAsync(int taskId, int userId);
+    Task<ServiceResult<TaskListDto>> RestoreTaskAsync(int taskId, int userId);
 }

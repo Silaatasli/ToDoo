@@ -324,4 +324,16 @@ public class TaskItemsController : ControllerBase
         var result = await _taskService.DeleteTaskAsync(id, userId);
         return result.ToActionResult();
     }
+
+    [HttpPost("{id:int}/restore")]
+    public async Task<IActionResult> Restore(int id)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskService.RestoreTaskAsync(id, userId);
+        return result.ToActionResult();
+    }
 }

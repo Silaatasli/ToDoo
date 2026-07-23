@@ -14,7 +14,6 @@ public class TaskService : ITaskService
     private readonly ICategoryService _categoryService;
     private readonly ITeamService _teamService;
     private readonly ITeamBoardNotifier _boardNotifier;
-    private readonly IFileStorageService _fileStorage;
     private readonly ILuceneSearchIndex _searchIndex;
     private readonly NotificationDispatchService _notificationDispatch;
 
@@ -23,7 +22,6 @@ public class TaskService : ITaskService
         ICategoryService categoryService,
         ITeamService teamService,
         ITeamBoardNotifier boardNotifier,
-        IFileStorageService fileStorage,
         ILuceneSearchIndex searchIndex,
         NotificationDispatchService notificationDispatch)
     {
@@ -31,7 +29,6 @@ public class TaskService : ITaskService
         _categoryService = categoryService;
         _teamService = teamService;
         _boardNotifier = boardNotifier;
-        _fileStorage = fileStorage;
         _searchIndex = searchIndex;
         _notificationDispatch = notificationDispatch;
     }
@@ -434,78 +431,68 @@ public class TaskService : ITaskService
         var boardId = task.BoardId;
         var title = task.Title;
 
-        var comments = (await _unitOfWork.TaskComments.GetAllAsync())
-            .Where(comment => comment.TaskId == taskId)
-            .ToList();
-        var commentIds = comments.Select(comment => comment.Id).ToHashSet();
-
-        var commentAttachments = (await _unitOfWork.CommentAttachments.GetAllAsync())
-            .Where(attachment => commentIds.Contains(attachment.CommentId))
-            .ToList();
-
-        var taskAttachments = (await _unitOfWork.TaskAttachments.GetAllAsync())
-            .Where(attachment => attachment.TaskId == taskId)
-            .ToList();
-
-        var objectKeys = commentAttachments
-            .Select(attachment => attachment.ObjectKey)
-            .Concat(taskAttachments.Select(attachment => attachment.ObjectKey))
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-
-        foreach (var attachment in commentAttachments)
-        {
-            await _unitOfWork.CommentAttachments.DeleteAsync(attachment.Id);
-        }
-
-        foreach (var comment in OrderCommentsForDelete(comments))
-        {
-            await _unitOfWork.TaskComments.DeleteAsync(comment.Id);
-        }
-
-        foreach (var attachment in taskAttachments)
-        {
-            await _unitOfWork.TaskAttachments.DeleteAsync(attachment.Id);
-        }
-
-        // TaskActivityLogs.TaskId FK NoAction: silmeden once baglantiyi kopar.
-        var activityLogs = (await _unitOfWork.TaskActivityLogs.GetAllAsync())
-            .Where(log => log.TaskId == taskId)
-            .ToList();
-        foreach (var log in activityLogs)
-        {
-            log.TaskId = null;
-            _unitOfWork.TaskActivityLogs.Update(log);
-        }
-
+        task.DeletedAt = DateTime.UtcNow;
+        task.DeletedByUserId = userId;
+        _unitOfWork.TaskItems.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        await LogActivityAsync(teamId, null, userId, TaskActivityAction.Deleted, title, null);
-
-        await _unitOfWork.TaskItems.DeleteAsync(taskId);
-        await _unitOfWork.SaveChangesAsync();
-
-        foreach (var objectKey in objectKeys)
-        {
-            try
-            {
-                await _fileStorage.DeleteAsync(objectKey);
-            }
-            catch
-            {
-                // DB silme basarili; MinIO temizligi best-effort.
-            }
-        }
+        await LogActivityAsync(teamId, taskId, userId, TaskActivityAction.Deleted, title, null);
 
         await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId, boardId);
         _searchIndex.RemoveTask(taskId);
         return ServiceResult.Ok();
     }
 
+    public async Task<ServiceResult<TaskListDto>> RestoreTaskAsync(int taskId, int userId)
+    {
+        var task = await _unitOfWork.TaskItems.GetByIdIgnoreFiltersAsync(taskId);
+        if (task is null || task.DeletedAt is null)
+        {
+            return ServiceResult<TaskListDto>.Fail("Gorev bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (!await _teamService.IsTeamMemberAsync(task.TeamId, userId))
+        {
+            return ServiceResult<TaskListDto>.Fail("Bu gorevi geri yukleme yetkiniz yok.", ServiceErrorKind.Forbidden);
+        }
+
+        var board = await _unitOfWork.Boards.GetByIdAsync(task.BoardId);
+        if (board is null || board.TeamId != task.TeamId)
+        {
+            return ServiceResult<TaskListDto>.Fail(
+                "Gorevin panosu artik mevcut degil; geri yuklenemez.",
+                ServiceErrorKind.Validation);
+        }
+
+        var column = await _unitOfWork.TeamBoardColumns.GetByIdAsync(task.BoardColumnId);
+        if (column is null || column.BoardId != task.BoardId)
+        {
+            return ServiceResult<TaskListDto>.Fail(
+                "Gorevin sutunu artik mevcut degil; geri yuklenemez.",
+                ServiceErrorKind.Validation);
+        }
+
+        task.DeletedAt = null;
+        task.DeletedByUserId = null;
+        _unitOfWork.TaskItems.Update(task);
+        await _unitOfWork.SaveChangesAsync();
+
+        await LogActivityAsync(task.TeamId, task.Id, userId, TaskActivityAction.TaskCreated, null, task.Title);
+        await _boardNotifier.NotifyBoardChangedAsync(
+            task.TeamId,
+            TeamBoardChangeTypes.TaskCreated,
+            userId,
+            task.Id,
+            task.BoardId);
+        await IndexTaskDocumentAsync(task);
+
+        return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
+    }
+
     private async Task<ServiceResult<TaskItem>> GetTaskIfMemberAsync(int taskId, int userId)
     {
         var task = await _unitOfWork.TaskItems.GetByIdAsync(taskId);
-        if (task is null)
+        if (task is null || task.DeletedAt is not null)
         {
             return ServiceResult<TaskItem>.Fail("Gorev bulunamadi.", ServiceErrorKind.NotFound);
         }
@@ -586,47 +573,6 @@ public class TaskService : ITaskService
         });
 
         await _unitOfWork.SaveChangesAsync();
-    }
-
-    private static List<TaskComment> OrderCommentsForDelete(IReadOnlyList<TaskComment> comments)
-    {
-        var byParent = comments
-            .Where(comment => comment.ParentCommentId.HasValue)
-            .GroupBy(comment => comment.ParentCommentId!.Value)
-            .ToDictionary(group => group.Key, group => group.ToList());
-
-        var ordered = new List<TaskComment>();
-        var visited = new HashSet<int>();
-
-        void Visit(TaskComment comment)
-        {
-            if (!visited.Add(comment.Id))
-            {
-                return;
-            }
-
-            if (byParent.TryGetValue(comment.Id, out var children))
-            {
-                foreach (var child in children)
-                {
-                    Visit(child);
-                }
-            }
-
-            ordered.Add(comment);
-        }
-
-        foreach (var root in comments.Where(comment => !comment.ParentCommentId.HasValue))
-        {
-            Visit(root);
-        }
-
-        foreach (var orphan in comments.Where(comment => !visited.Contains(comment.Id)))
-        {
-            Visit(orphan);
-        }
-
-        return ordered;
     }
 
     private async Task<TaskDetailDto> MapToDetailDtoAsync(TaskItem task)
