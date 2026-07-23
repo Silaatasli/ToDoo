@@ -993,11 +993,52 @@ export class TeamBoard implements OnInit {
     this.dragOriginColumnId = null;
     this.lastBroadcastHoverColumnId = null;
 
+    const task = source.tasks.find((item) => item.id === taskId);
+    const completeRemaining = this.confirmCompleteRemainingSubtasks(
+      task,
+      column.isCompletedColumn
+    );
+    if (completeRemaining === null) {
+      return;
+    }
+
     this.moveTaskLocally(taskId, source.id, column.id, targetIndex);
 
-    this.taskService.moveToColumn(taskId, column.id, targetIndex).subscribe({
+    const leftCompleted = source.isCompletedColumn && !column.isCompletedColumn;
+    this.taskService.moveToColumn(taskId, column.id, targetIndex, completeRemaining).subscribe({
+      next: () => {
+        if (completeRemaining || leftCompleted) {
+          this.refreshBoardSilent();
+        }
+      },
       error: () => this.refreshBoardSilent()
     });
+  }
+
+  /**
+   * Tamamlandi sutununa tasimada eksik alt gorev varsa onay ister.
+   * true: kalanlari da tamamla, false: alt gorev yok/hepsi bitmis, null: iptal.
+   */
+  private confirmCompleteRemainingSubtasks(
+    task: { subtaskTotal?: number; subtaskDoneCount?: number; title?: string } | undefined,
+    toCompletedColumn: boolean
+  ): boolean | null {
+    if (!toCompletedColumn || !task) {
+      return false;
+    }
+
+    const total = task.subtaskTotal ?? 0;
+    const done = task.subtaskDoneCount ?? 0;
+    if (total <= 0 || done >= total) {
+      return false;
+    }
+
+    const pending = total - done;
+    const ok = confirm(
+      `"${task.title ?? 'Görev'}" için ${pending} alt görev henüz bitmedi (${done}/${total}).\n\n` +
+        `Kalan alt görevleri de tamamlayıp ana görevi bitirmek ister misiniz?`
+    );
+    return ok ? true : null;
   }
 
   /** rawIndex: tasinan kart dahil listedeki hedef konum; donen deger kaldirma sonrasi final indeks. */
@@ -1034,9 +1075,11 @@ export class TeamBoard implements OnInit {
     }
 
     let moved: TaskListItem | undefined;
+    let fromWasCompleted = false;
     const columns = current.columns.map((col) => {
       if (col.id === fromColumnId) {
         moved = col.tasks.find((t) => t.id === taskId);
+        fromWasCompleted = col.isCompletedColumn;
         return { ...col, tasks: col.tasks.filter((t) => t.id !== taskId) };
       }
       return col;
@@ -1051,7 +1094,10 @@ export class TeamBoard implements OnInit {
       boardColumnId: targetColumn.id,
       boardColumnTitle: targetColumn.title,
       isCompleted: targetColumn.isCompletedColumn,
-      displayOrder: targetIndex
+      displayOrder: targetIndex,
+      ...(fromWasCompleted && !targetColumn.isCompletedColumn
+        ? { subtaskDoneCount: 0 }
+        : {})
     };
 
     const withMoved = columns.map((col) => {

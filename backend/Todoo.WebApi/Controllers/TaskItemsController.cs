@@ -88,19 +88,56 @@ public class TaskItemsController : ControllerBase
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _taskService.MoveTaskToColumnAsync(id, request.BoardColumnId, userId, request.TargetIndex);
+        var result = await _taskService.MoveTaskToColumnAsync(
+            id,
+            request.BoardColumnId,
+            userId,
+            request.TargetIndex,
+            request.CompleteRemainingSubtasks);
         return result.ToActionResult();
     }
 
-    [HttpPatch("{id:int}/complete")]
-    public async Task<IActionResult> Complete(int id)
+    [HttpPost("{id:int}/subtasks")]
+    public async Task<IActionResult> CreateSubtask(int id, [FromBody] CreateSubtaskRequestDto request)
     {
         if (!TryGetUserId(out var userId))
         {
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _taskService.CompleteTaskAsync(id, userId);
+        var result = await _taskService.CreateSubtaskAsync(
+            id,
+            request.Title,
+            request.Description,
+            request.AssignedToUserId,
+            userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPatch("{id:int}/subtask-status")]
+    public async Task<IActionResult> UpdateSubtaskStatus(int id, [FromBody] UpdateSubtaskStatusRequestDto request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskService.UpdateSubtaskStatusAsync(id, request.Status, userId);
+        return result.ToActionResult();
+    }
+
+    [HttpPatch("{id:int}/complete")]
+    public async Task<IActionResult> Complete(int id, [FromBody] CompleteTaskRequestDto? request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
+        }
+
+        var result = await _taskService.CompleteTaskAsync(
+            id,
+            userId,
+            request?.CompleteRemainingSubtasks ?? false);
         return result.ToActionResult();
     }
 

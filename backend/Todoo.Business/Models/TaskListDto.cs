@@ -43,4 +43,12 @@ public class TaskListDto
     public string? AssignedToEmail { get; set; }
 
     public AssignmentStatus AssignmentStatus { get; set; }
+
+    public int? ParentTaskId { get; set; }
+
+    public SubtaskStatus? SubtaskStatus { get; set; }
+
+    public int SubtaskDoneCount { get; set; }
+
+    public int SubtaskTotal { get; set; }
 }

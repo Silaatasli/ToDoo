@@ -294,6 +294,7 @@
     [photoUrlFn]="memberPhotoUrlFn"
     (closed)="closeTaskDetail()"
     (changed)="refreshBoardSilent()"
+    (navigateToTask)="openTaskId.set($event)"
     (categoryCreated)="onCategoryCreated($event)"
   />
 }

@@ -16,6 +16,12 @@ public class TaskItem
     /// <summary>Sutun icindeki sira (0 tabanli).</summary>
     public int DisplayOrder { get; set; }
 
+    /// <summary>parent taskın idsi Null ise ana gorev(parent yok); dolu ise alt gorev.</summary>
+    public int? ParentTaskId { get; set; }
+
+    /// <summary>Sadece alt gorevlerde kullanilir.</summary>
+    public SubtaskStatus? SubtaskStatus { get; set; }
+
     public int CreatedByUserId { get; set; }
 
     public int? AssignedToUserId { get; set; }
@@ -32,6 +38,12 @@ public class TaskItem
 
     [JsonIgnore]
     public TeamBoardColumn BoardColumn { get; set; } = null!;
+
+    [JsonIgnore]
+    public TaskItem? ParentTask { get; set; }
+
+    [JsonIgnore]
+    public ICollection<TaskItem> Subtasks { get; set; } = [];
 
     [JsonIgnore]
     public User CreatedBy { get; set; } = null!;

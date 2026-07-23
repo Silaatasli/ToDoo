@@ -104,6 +104,12 @@ export enum AssignmentStatus {
   Declined = 3
 }
 
+export enum SubtaskStatus {
+  Todo = 0,
+  InProgress = 1,
+  Done = 2
+}
+
 export interface TaskDetail {
   id: number;
   teamId: number;
@@ -126,6 +132,12 @@ export interface TaskDetail {
   assignedToUserId?: number | null;
   assignedToEmail?: string | null;
   assignmentStatus: AssignmentStatus;
+  parentTaskId?: number | null;
+  parentTaskTitle?: string | null;
+  subtaskStatus?: SubtaskStatus | null;
+  subtaskDoneCount: number;
+  subtaskTotal: number;
+  subtasks?: TaskListItem[];
 }
 
 export interface UpdateTaskRequest {
@@ -157,6 +169,10 @@ export interface TaskListItem {
   assignedToUserId?: number | null;
   assignedToEmail?: string | null;
   assignmentStatus: AssignmentStatus;
+  parentTaskId?: number | null;
+  subtaskStatus?: SubtaskStatus | null;
+  subtaskDoneCount?: number;
+  subtaskTotal?: number;
 }
 
 export enum TaskActivityAction {

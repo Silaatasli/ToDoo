@@ -734,6 +734,13 @@ public class TeamService : ITeamService
             .Where(task => task.BoardId == board.Id)
             .ToList();
 
+        var subtasksByParent = tasks
+            .Where(task => task.ParentTaskId.HasValue)
+            .GroupBy(task => task.ParentTaskId!.Value)
+            .ToDictionary(group => group.Key, group => group.ToList());
+
+        var rootTasks = tasks.Where(task => task.ParentTaskId == null).ToList();
+
         var categoryMap = (await _unitOfWork.Categories.GetAllAsync())
             .ToDictionary(category => category.Id, category => category.Name);
         var userMap = (await _unitOfWork.Users.GetAllAsync())
@@ -742,32 +749,41 @@ public class TeamService : ITeamService
 
         var teamEntity = await _unitOfWork.Teams.GetByIdAsync(team.Id);
 
-        var taskDtos = tasks.Select(task => new TaskListDto
+        var taskDtos = rootTasks.Select(task =>
         {
-            Id = task.Id,
-            Title = task.Title,
-            Description = task.Description,
-            CategoryId = task.CategoryId,
-            CategoryName = task.CategoryId.HasValue && categoryMap.TryGetValue(task.CategoryId.Value, out var categoryName)
-                ? categoryName
-                : null,
-            Priority = task.Priority,
-            StartDate = task.StartDate,
-            DueDate = task.DueDate,
-            IsCompleted = task.IsCompleted,
-            TeamId = task.TeamId,
-            BoardId = task.BoardId,
-            BoardName = board.Name,
-            BoardColumnId = task.BoardColumnId,
-            DisplayOrder = task.DisplayOrder,
-            BoardColumnTitle = columnMap.GetValueOrDefault(task.BoardColumnId),
-            AssignedToUserId = task.AssignedToUserId,
-            AssignedToEmail = task.AssignedToUserId.HasValue
-                ? userMap.GetValueOrDefault(task.AssignedToUserId.Value)
-                : null,
-            AssignmentStatus = task.AssignmentStatus,
-            TeamName = team.Name,
-            IsPersonalTeam = teamEntity?.IsPersonal ?? false
+            var children = subtasksByParent.GetValueOrDefault(task.Id) ?? [];
+            var doneCount = children.Count(child => child.SubtaskStatus == SubtaskStatus.Done);
+            return new TaskListDto
+            {
+                Id = task.Id,
+                Title = task.Title,
+                Description = task.Description,
+                CategoryId = task.CategoryId,
+                CategoryName = task.CategoryId.HasValue && categoryMap.TryGetValue(task.CategoryId.Value, out var categoryName)
+                    ? categoryName
+                    : null,
+                Priority = task.Priority,
+                StartDate = task.StartDate,
+                DueDate = task.DueDate,
+                IsCompleted = task.IsCompleted,
+                TeamId = task.TeamId,
+                BoardId = task.BoardId,
+                BoardName = board.Name,
+                BoardColumnId = task.BoardColumnId,
+                DisplayOrder = task.DisplayOrder,
+                BoardColumnTitle = columnMap.GetValueOrDefault(task.BoardColumnId),
+                AssignedToUserId = task.AssignedToUserId,
+                AssignedToEmail = task.AssignedToUserId.HasValue
+                    ? userMap.GetValueOrDefault(task.AssignedToUserId.Value)
+                    : null,
+                AssignmentStatus = task.AssignmentStatus,
+                ParentTaskId = null,
+                SubtaskStatus = null,
+                SubtaskDoneCount = doneCount,
+                SubtaskTotal = children.Count,
+                TeamName = team.Name,
+                IsPersonalTeam = teamEntity?.IsPersonal ?? false
+            };
         })
             .OrderBy(task => task.DisplayOrder)
             .ThenBy(task => task.Id)

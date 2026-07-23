@@ -13,7 +13,7 @@ import {
   untracked
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { RouterLink } from '@angular/router';
 import { concatMap, from, of, switchMap, toArray } from 'rxjs';
@@ -29,6 +29,7 @@ import {
   CommentAttachment,
   CreateCommentRequest,
   Priority,
+  SubtaskStatus,
   TaskActivityAction,
   TaskAttachment,
   TaskComment,
@@ -47,7 +48,7 @@ import { initial, memberName, PRIORITY_OPTIONS, priorityClass, priorityLabel } f
 
 @Component({
   selector: 'app-task-detail-modal',
-  imports: [ReactiveFormsModule, DatePipe, NgTemplateOutlet, RouterLink],
+  imports: [ReactiveFormsModule, FormsModule, DatePipe, NgTemplateOutlet, RouterLink],
   templateUrl: './task-detail-modal.html',
   styleUrl: './task-detail-modal.scss'
 })
@@ -74,6 +75,7 @@ export class TaskDetailModalComponent {
   readonly closed = output<void>();
   readonly changed = output<void>();
   readonly categoryCreated = output<Category>();
+  readonly navigateToTask = output<number>();
 
   readonly detailLoading = signal(false);
   readonly detail = signal<TaskDetail | null>(null);
@@ -114,7 +116,18 @@ export class TaskDetailModalComponent {
   readonly attachmentsExpanded = signal(true);
   readonly descriptionExpanded = signal(true);
   readonly activityExpanded = signal(false);
+  readonly subtasksExpanded = signal(true);
   readonly detailsExpanded = signal(true);
+  readonly addingSubtask = signal(false);
+  readonly updatingSubtaskId = signal<number | null>(null);
+  readonly subtaskError = signal<string | null>(null);
+  readonly subtaskForm = this.fb.nonNullable.group({
+    title: ['', [Validators.required, Validators.maxLength(200)]],
+    description: ['', [Validators.maxLength(4000)]],
+    assignedToUserId: ['' as string]
+  });
+  readonly assignmentStatus = AssignmentStatus;
+  readonly subtaskStatus = SubtaskStatus;
   readonly showColumnMenu = signal(false);
   readonly movingColumn = signal(false);
 
@@ -174,7 +187,6 @@ export class TaskDetailModalComponent {
     return this.taskAttachments().find((attachment) => attachment.id === id) ?? null;
   });
 
-  readonly assignmentStatus = AssignmentStatus;
   readonly priorityOptions = PRIORITY_OPTIONS;
   readonly priorityLabel = priorityLabel;
   readonly priorityClass = priorityClass;
@@ -253,7 +265,12 @@ export class TaskDetailModalComponent {
     this.attachmentsExpanded.set(true);
     this.descriptionExpanded.set(true);
     this.activityExpanded.set(false);
+    this.subtasksExpanded.set(true);
     this.detailsExpanded.set(true);
+    this.subtaskError.set(null);
+    this.subtaskForm.reset({ title: '', description: '', assignedToUserId: '' });
+    this.addingSubtask.set(false);
+    this.updatingSubtaskId.set(null);
     this.showColumnMenu.set(false);
     this.movingColumn.set(false);
     this.commentForm.reset({ body: '' });
@@ -707,8 +724,115 @@ export class TaskDetailModalComponent {
     this.activityExpanded.update((expanded) => !expanded);
   }
 
+  toggleSubtasksSection(): void {
+    this.subtasksExpanded.update((expanded) => !expanded);
+  }
+
   toggleDetailsSection(): void {
     this.detailsExpanded.update((expanded) => !expanded);
+  }
+
+  subtaskProgressPercent(detail: TaskDetail): number {
+    if (!detail.subtaskTotal) {
+      return 0;
+    }
+    return Math.round((detail.subtaskDoneCount / detail.subtaskTotal) * 100);
+  }
+
+  normalizeSubtaskStatus(status: SubtaskStatus | number | null | undefined): SubtaskStatus {
+    const value = Number(status);
+    if (value === SubtaskStatus.InProgress) {
+      return SubtaskStatus.InProgress;
+    }
+    if (value === SubtaskStatus.Done) {
+      return SubtaskStatus.Done;
+    }
+    return SubtaskStatus.Todo;
+  }
+
+  openSubtask(taskId: number): void {
+    this.navigateToTask.emit(taskId);
+  }
+
+  addSubtask(): void {
+    const parent = this.detail();
+    if (!parent || parent.parentTaskId || this.subtaskForm.invalid || this.addingSubtask()) {
+      this.subtaskForm.markAllAsTouched();
+      return;
+    }
+
+    const { title, description, assignedToUserId } = this.subtaskForm.getRawValue();
+    const trimmedTitle = title.trim();
+    if (!trimmedTitle) {
+      return;
+    }
+
+    const assigneeId = assignedToUserId ? Number(assignedToUserId) : null;
+
+    this.addingSubtask.set(true);
+    this.subtaskError.set(null);
+    this.taskService
+      .createSubtask(
+        parent.id,
+        trimmedTitle,
+        description.trim() || null,
+        Number.isFinite(assigneeId) ? assigneeId : null
+      )
+      .subscribe({
+        next: () => {
+          this.addingSubtask.set(false);
+          this.subtaskForm.reset({ title: '', description: '', assignedToUserId: '' });
+          this.refreshDetail(parent.id);
+          this.changed.emit();
+        },
+        error: (err: HttpErrorResponse) => {
+          this.addingSubtask.set(false);
+          this.subtaskError.set(err.error?.message ?? 'Alt görev eklenemedi.');
+        }
+      });
+  }
+
+  changeSubtaskStatus(subtaskId: number, status: SubtaskStatus): void {
+    const parent = this.detail();
+    if (!parent || this.updatingSubtaskId() === subtaskId) {
+      return;
+    }
+
+    this.updatingSubtaskId.set(subtaskId);
+    this.subtaskError.set(null);
+    this.taskService.updateSubtaskStatus(subtaskId, status).subscribe({
+      next: () => {
+        this.updatingSubtaskId.set(null);
+        this.refreshDetail(parent.id);
+        this.changed.emit();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.updatingSubtaskId.set(null);
+        this.subtaskError.set(err.error?.message ?? 'Durum güncellenemedi.');
+        this.refreshDetail(parent.id);
+      }
+    });
+  }
+
+  changeOwnSubtaskStatus(status: SubtaskStatus): void {
+    const detail = this.detail();
+    if (!detail?.parentTaskId) {
+      return;
+    }
+
+    this.updatingSubtaskId.set(detail.id);
+    this.taskService.updateSubtaskStatus(detail.id, status).subscribe({
+      next: () => {
+        this.updatingSubtaskId.set(null);
+        this.refreshDetail(detail.id);
+        this.changed.emit();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.updatingSubtaskId.set(null);
+        this.detailError.set(err.error?.message ?? 'Durum güncellenemedi.');
+        this.refreshDetail(detail.id);
+      }
+    });
   }
 
   onCommentFilesSelected(event: Event): void {
@@ -1338,8 +1462,23 @@ export class TaskDetailModalComponent {
       return;
     }
 
-    const request = d.isCompleted ? this.taskService.reopen(d.id) : this.taskService.complete(d.id);
-    request.subscribe({
+    if (d.isCompleted) {
+      this.taskService.reopen(d.id).subscribe({
+        next: () => {
+          this.refreshDetail(d.id);
+          this.changed.emit();
+        },
+        error: () => this.refreshDetail(d.id)
+      });
+      return;
+    }
+
+    const completeRemaining = this.confirmCompleteRemainingSubtasks(d);
+    if (completeRemaining === null) {
+      return;
+    }
+
+    this.taskService.complete(d.id, completeRemaining).subscribe({
       next: () => {
         this.refreshDetail(d.id);
         this.changed.emit();
@@ -1363,22 +1502,19 @@ export class TaskDetailModalComponent {
       return;
     }
 
+    const completeRemaining = this.confirmCompleteRemainingSubtasks(detail, column.isCompletedColumn);
+    if (completeRemaining === null) {
+      this.closeColumnMenu();
+      return;
+    }
+
     this.movingColumn.set(true);
     this.closeColumnMenu();
 
-    this.taskService.moveToColumn(detail.id, column.id).subscribe({
+    this.taskService.moveToColumn(detail.id, column.id, null, completeRemaining).subscribe({
       next: () => {
         this.movingColumn.set(false);
-        this.detail.update((current) =>
-          current
-            ? {
-                ...current,
-                boardColumnId: column.id,
-                boardColumnTitle: column.title,
-                isCompleted: column.isCompletedColumn
-              }
-            : null
-        );
+        this.refreshDetail(detail.id);
         this.changed.emit();
       },
       error: () => {
@@ -1386,6 +1522,29 @@ export class TaskDetailModalComponent {
         this.refreshDetail(detail.id);
       }
     });
+  }
+
+  /** true: kalanlari tamamla, false: gerek yok, null: iptal */
+  private confirmCompleteRemainingSubtasks(
+    detail: TaskDetail,
+    toCompletedColumn = true
+  ): boolean | null {
+    if (!toCompletedColumn || detail.parentTaskId) {
+      return false;
+    }
+
+    const total = detail.subtaskTotal ?? 0;
+    const done = detail.subtaskDoneCount ?? 0;
+    if (total <= 0 || done >= total) {
+      return false;
+    }
+
+    const pending = total - done;
+    const ok = confirm(
+      `"${detail.title}" için ${pending} alt görev henüz bitmedi (${done}/${total}).\n\n` +
+        `Kalan alt görevleri de tamamlayıp ana görevi bitirmek ister misiniz?`
+    );
+    return ok ? true : null;
   }
 
   deleteTask(task: TaskDetail): void {

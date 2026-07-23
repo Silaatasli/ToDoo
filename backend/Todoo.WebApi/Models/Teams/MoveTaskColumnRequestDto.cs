@@ -13,4 +13,9 @@ public class MoveTaskColumnRequestDto
     /// </summary>
     [Range(0, int.MaxValue)]
     public int? TargetIndex { get; set; }
+
+    /// <summary>
+    /// Tamamlandi sutununa tasirken eksik alt gorevleri de Done yapar.
+    /// </summary>
+    public bool CompleteRemainingSubtasks { get; set; }
 }

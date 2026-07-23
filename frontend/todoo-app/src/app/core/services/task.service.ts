@@ -30,15 +30,23 @@ export class TaskService {
     return this.http.put<TaskListItem>(`${this.baseUrl}/${taskId}`, request);
   }
 
-  moveToColumn(taskId: number, boardColumnId: number, targetIndex?: number | null): Observable<TaskListItem> {
+  moveToColumn(
+    taskId: number,
+    boardColumnId: number,
+    targetIndex?: number | null,
+    completeRemainingSubtasks = false
+  ): Observable<TaskListItem> {
     return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/column`, {
       boardColumnId,
-      targetIndex: targetIndex ?? null
+      targetIndex: targetIndex ?? null,
+      completeRemainingSubtasks
     });
   }
 
-  complete(taskId: number): Observable<TaskListItem> {
-    return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/complete`, {});
+  complete(taskId: number, completeRemainingSubtasks = false): Observable<TaskListItem> {
+    return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/complete`, {
+      completeRemainingSubtasks
+    });
   }
 
   reopen(taskId: number): Observable<TaskListItem> {
@@ -63,6 +71,23 @@ export class TaskService {
 
   restore(taskId: number): Observable<TaskListItem> {
     return this.http.post<TaskListItem>(`${this.baseUrl}/${taskId}/restore`, {});
+  }
+
+  createSubtask(
+    parentTaskId: number,
+    title: string,
+    description?: string | null,
+    assignedToUserId?: number | null
+  ): Observable<TaskListItem> {
+    return this.http.post<TaskListItem>(`${this.baseUrl}/${parentTaskId}/subtasks`, {
+      title,
+      description: description?.trim() ? description.trim() : null,
+      assignedToUserId: assignedToUserId ?? null
+    });
+  }
+
+  updateSubtaskStatus(taskId: number, status: number): Observable<TaskListItem> {
+    return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/subtask-status`, { status });
   }
 
   listAttachments(taskId: number): Observable<TaskAttachment[]> {

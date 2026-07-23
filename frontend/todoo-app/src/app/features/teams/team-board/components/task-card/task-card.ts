@@ -26,6 +26,14 @@ export class TaskCardComponent {
   readonly priorityClass = priorityClass;
   readonly initial = initial;
 
+  subtaskProgressPercent(): number {
+    const total = this.task().subtaskTotal ?? 0;
+    if (!total) {
+      return 0;
+    }
+    return Math.round(((this.task().subtaskDoneCount ?? 0) / total) * 100);
+  }
+
   onDragStart(event: DragEvent): void {
     if (event.dataTransfer) {
       event.dataTransfer.effectAllowed = 'move';

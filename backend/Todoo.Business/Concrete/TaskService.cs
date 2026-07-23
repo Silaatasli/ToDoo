@@ -178,6 +178,129 @@ public class TaskService : ITaskService
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
     }
 
+    public async Task<ServiceResult<TaskListDto>> CreateSubtaskAsync(
+        int parentTaskId,
+        string title,
+        string? description,
+        int? assignedToUserId,
+        int userId)
+    {
+        var parentResult = await GetTaskIfMemberAsync(parentTaskId, userId);
+        if (!parentResult.Success)
+        {
+            return ServiceResult<TaskListDto>.Fail(
+                parentResult.ErrorMessage!,
+                parentResult.ErrorKind ?? ServiceErrorKind.Validation);
+        }
+
+        var parent = parentResult.Data!;
+        if (parent.ParentTaskId.HasValue)
+        {
+            return ServiceResult<TaskListDto>.Fail("Alt goreve yeni alt gorev eklenemez.");
+        }
+
+        var trimmed = title?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return ServiceResult<TaskListDto>.Fail("Alt gorev basligi zorunludur.");
+        }
+
+        var trimmedDescription = string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+        if (trimmedDescription is { Length: > 4000 })
+        {
+            return ServiceResult<TaskListDto>.Fail("Aciklama en fazla 4000 karakter olabilir.");
+        }
+
+        if (assignedToUserId.HasValue && !await _teamService.IsTeamMemberAsync(parent.TeamId, assignedToUserId.Value))
+        {
+            return ServiceResult<TaskListDto>.Fail("Atanan kullanici bu takimin uyesi degil.");
+        }
+
+        var subtask = new TaskItem
+        {
+            TeamId = parent.TeamId,
+            BoardId = parent.BoardId,
+            BoardColumnId = parent.BoardColumnId,
+            ParentTaskId = parent.Id,
+            SubtaskStatus = SubtaskStatus.Todo,
+            DisplayOrder = await GetNextSubtaskDisplayOrderAsync(parent.Id),
+            CreatedByUserId = userId,
+            Title = trimmed,
+            Description = trimmedDescription,
+            Priority = parent.Priority,
+            StartDate = DateTime.UtcNow,
+            IsCompleted = false,
+            AssignedToUserId = assignedToUserId
+        };
+
+        ApplyAssignmentState(subtask, assignedToUserId, userId);
+
+        _unitOfWork.TaskItems.Add(subtask);
+        await _unitOfWork.SaveChangesAsync();
+
+        await LogActivityAsync(subtask.TeamId, parent.Id, userId, TaskActivityAction.Updated, null, $"Alt gorev: {subtask.Title}");
+        await SyncParentCompletionAsync(parent.Id, userId);
+        await _boardNotifier.NotifyBoardChangedAsync(
+            parent.TeamId,
+            TeamBoardChangeTypes.TaskUpdated,
+            userId,
+            parent.Id,
+            parent.BoardId);
+
+        if (assignedToUserId.HasValue)
+        {
+            await _notificationDispatch.NotifyTaskAssignedAsync(
+                assignedToUserId.Value,
+                userId,
+                subtask.TeamId,
+                subtask.BoardId,
+                subtask.Id,
+                subtask.Title);
+        }
+
+        return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(subtask));
+    }
+
+    public async Task<ServiceResult<TaskListDto>> UpdateSubtaskStatusAsync(int taskId, SubtaskStatus status, int userId)
+    {
+        var taskResult = await GetTaskIfMemberAsync(taskId, userId);
+        if (!taskResult.Success)
+        {
+            return ServiceResult<TaskListDto>.Fail(
+                taskResult.ErrorMessage!,
+                taskResult.ErrorKind ?? ServiceErrorKind.Validation);
+        }
+
+        var task = taskResult.Data!;
+        if (!task.ParentTaskId.HasValue)
+        {
+            return ServiceResult<TaskListDto>.Fail("Bu endpoint yalnizca alt gorevler icindir.");
+        }
+
+        task.SubtaskStatus = status;
+        task.IsCompleted = status == SubtaskStatus.Done;
+        _unitOfWork.TaskItems.Update(task);
+        await _unitOfWork.SaveChangesAsync();
+
+        await LogActivityAsync(
+            task.TeamId,
+            task.Id,
+            userId,
+            TaskActivityAction.Updated,
+            null,
+            SubtaskStatusLabel(status));
+
+        await SyncParentCompletionAsync(task.ParentTaskId.Value, userId);
+        await _boardNotifier.NotifyBoardChangedAsync(
+            task.TeamId,
+            TeamBoardChangeTypes.TaskUpdated,
+            userId,
+            task.ParentTaskId.Value,
+            task.BoardId);
+
+        return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
+    }
+
     public async Task<ServiceResult<TaskListDto>> UpdateTaskAsync(TaskItem task, int userId)
     {
         var taskResult = await GetTaskIfMemberAsync(task.Id, userId);
@@ -216,7 +339,8 @@ public class TaskService : ITaskService
         int taskId,
         int boardColumnId,
         int userId,
-        int? targetIndex = null)
+        int? targetIndex = null,
+        bool completeRemainingSubtasks = false)
     {
         var taskResult = await GetTaskIfMemberAsync(taskId, userId);
         if (!taskResult.Success)
@@ -227,6 +351,11 @@ public class TaskService : ITaskService
         }
 
         var task = taskResult.Data!;
+        if (task.ParentTaskId.HasValue)
+        {
+            return ServiceResult<TaskListDto>.Fail("Alt gorevler panoda tasinamaz; durumunu degistirin.");
+        }
+
         var newColumn = await _unitOfWork.TeamBoardColumns.GetByIdAsync(boardColumnId);
         if (newColumn is null)
         {
@@ -239,10 +368,41 @@ public class TaskService : ITaskService
                 $"boardColumnId {boardColumnId} bu gorevin panosuna (boardId: {task.BoardId}) ait degil.");
         }
 
-        return await ApplyColumnChangeAsync(task, newColumn, userId, targetIndex);
+        if (newColumn.IsCompletedColumn)
+        {
+            var ready = await PrepareParentCompletionAsync(task.Id, userId, completeRemainingSubtasks);
+            if (!ready.Success)
+            {
+                return ServiceResult<TaskListDto>.Fail(ready.ErrorMessage!);
+            }
+        }
+
+        var wasCompleted = task.IsCompleted;
+        var moved = await ApplyColumnChangeAsync(task, newColumn, userId, targetIndex);
+        if (!moved.Success || newColumn.IsCompletedColumn)
+        {
+            return moved;
+        }
+
+        if (wasCompleted)
+        {
+            // Tamamlandidan cikinca alt gorev progressi sifirlanir.
+            await ResetSubtasksProgressAsync(task.Id, userId);
+        }
+        else
+        {
+            // Tum alt gorevler bitmisse parent yeniden tamamlanir.
+            await SyncParentCompletionAsync(task.Id, userId);
+        }
+
+        return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(
+            (await _unitOfWork.TaskItems.GetByIdAsync(task.Id))!));
     }
 
-    public async Task<ServiceResult<TaskListDto>> CompleteTaskAsync(int taskId, int userId)
+    public async Task<ServiceResult<TaskListDto>> CompleteTaskAsync(
+        int taskId,
+        int userId,
+        bool completeRemainingSubtasks = false)
     {
         var taskResult = await GetTaskIfMemberAsync(taskId, userId);
         if (!taskResult.Success)
@@ -253,6 +413,17 @@ public class TaskService : ITaskService
         }
 
         var task = taskResult.Data!;
+        if (task.ParentTaskId.HasValue)
+        {
+            return await UpdateSubtaskStatusAsync(taskId, SubtaskStatus.Done, userId);
+        }
+
+        var ready = await PrepareParentCompletionAsync(task.Id, userId, completeRemainingSubtasks);
+        if (!ready.Success)
+        {
+            return ServiceResult<TaskListDto>.Fail(ready.ErrorMessage!);
+        }
+
         var columns = await GetBoardColumnsAsync(task.BoardId);
         var completedColumn = columns.FirstOrDefault(column => column.IsCompletedColumn);
         if (completedColumn is null)
@@ -274,6 +445,11 @@ public class TaskService : ITaskService
         }
 
         var task = taskResult.Data!;
+        if (task.ParentTaskId.HasValue)
+        {
+            return await UpdateSubtaskStatusAsync(taskId, SubtaskStatus.Todo, userId);
+        }
+
         var columns = await GetBoardColumnsAsync(task.BoardId);
         var activeColumn = columns.FirstOrDefault(column => !column.IsCompletedColumn);
         if (activeColumn is null)
@@ -281,7 +457,15 @@ public class TaskService : ITaskService
             return ServiceResult<TaskListDto>.Fail("Bu gorevin panosunda aktif sutun bulunamadi.");
         }
 
-        return await ApplyColumnChangeAsync(task, activeColumn, userId);
+        var reopened = await ApplyColumnChangeAsync(task, activeColumn, userId);
+        if (!reopened.Success)
+        {
+            return reopened;
+        }
+
+        await ResetSubtasksProgressAsync(task.Id, userId);
+        return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(
+            (await _unitOfWork.TaskItems.GetByIdAsync(task.Id))!));
     }
 
     public async Task<ServiceResult<TaskListDto>> AssignTaskAsync(int taskId, int? assignedToUserId, int userId)
@@ -434,16 +618,47 @@ public class TaskService : ITaskService
         var task = taskResult.Data!;
         var teamId = task.TeamId;
         var boardId = task.BoardId;
+        var parentId = task.ParentTaskId;
         var title = task.Title;
+        var now = DateTime.UtcNow;
 
-        task.DeletedAt = DateTime.UtcNow;
+        task.DeletedAt = now;
         task.DeletedByUserId = userId;
         _unitOfWork.TaskItems.Update(task);
+
+        if (!parentId.HasValue)
+        {
+            var children = (await _unitOfWork.TaskItems.GetAllAsync())
+                .Where(item => item.ParentTaskId == task.Id)
+                .ToList();
+            foreach (var child in children)
+            {
+                child.DeletedAt = now;
+                child.DeletedByUserId = userId;
+                _unitOfWork.TaskItems.Update(child);
+                _searchIndex.RemoveTask(child.Id);
+            }
+        }
+
         await _unitOfWork.SaveChangesAsync();
 
         await LogActivityAsync(teamId, taskId, userId, TaskActivityAction.Deleted, title, null);
 
-        await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId, boardId);
+        if (parentId.HasValue)
+        {
+            await SyncParentCompletionAsync(parentId.Value, userId);
+            await _boardNotifier.NotifyBoardChangedAsync(
+                teamId,
+                TeamBoardChangeTypes.TaskUpdated,
+                userId,
+                parentId.Value,
+                boardId);
+        }
+        else
+        {
+            await _boardNotifier.NotifyBoardChangedAsync(teamId, TeamBoardChangeTypes.TaskDeleted, userId, taskId, boardId);
+        }
+
         _searchIndex.RemoveTask(taskId);
         return ServiceResult.Ok();
     }
@@ -597,7 +812,7 @@ public class TaskService : ITaskService
     private async Task<List<TaskItem>> GetOrderedColumnTasksAsync(int boardColumnId)
     {
         return (await _unitOfWork.TaskItems.GetAllAsync())
-            .Where(item => item.BoardColumnId == boardColumnId)
+            .Where(item => item.BoardColumnId == boardColumnId && item.ParentTaskId == null)
             .OrderBy(item => item.DisplayOrder)
             .ThenBy(item => item.Id)
             .ToList();
@@ -624,8 +839,157 @@ public class TaskService : ITaskService
         return tasks.Count == 0 ? 0 : tasks.Max(item => item.DisplayOrder) + 1;
     }
 
+    private async Task SyncParentCompletionAsync(int parentTaskId, int userId)
+    {
+        var parent = await _unitOfWork.TaskItems.GetByIdAsync(parentTaskId);
+        if (parent is null || parent.ParentTaskId.HasValue)
+        {
+            return;
+        }
+
+        var subtasks = await GetSubtasksAsync(parentTaskId);
+        if (subtasks.Count == 0)
+        {
+            return;
+        }
+
+        var allDone = subtasks.All(item => item.SubtaskStatus == SubtaskStatus.Done);
+        if (allDone && !parent.IsCompleted)
+        {
+            var columns = await GetBoardColumnsAsync(parent.BoardId);
+            var completedColumn = columns.FirstOrDefault(column => column.IsCompletedColumn);
+            if (completedColumn is not null)
+            {
+                await ApplyColumnChangeAsync(parent, completedColumn, userId);
+            }
+
+            return;
+        }
+
+        if (!allDone && parent.IsCompleted)
+        {
+            var columns = await GetBoardColumnsAsync(parent.BoardId);
+            var activeColumn = columns.FirstOrDefault(column => !column.IsCompletedColumn);
+            if (activeColumn is not null)
+            {
+                await ApplyColumnChangeAsync(parent, activeColumn, userId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Alt gorevler varken ana gorev ancak hepsi Done ise tamamlanabilir.
+    /// completeRemainingSubtasks=true ise eksikler once Done yapilir.
+    /// </summary>
+    private async Task<ServiceResult> PrepareParentCompletionAsync(
+        int parentTaskId,
+        int userId,
+        bool completeRemainingSubtasks)
+    {
+        var subtasks = await GetSubtasksAsync(parentTaskId);
+        if (subtasks.Count == 0)
+        {
+            return ServiceResult.Ok();
+        }
+
+        var incomplete = subtasks.Where(item => item.SubtaskStatus != SubtaskStatus.Done).ToList();
+        if (incomplete.Count == 0)
+        {
+            return ServiceResult.Ok();
+        }
+
+        if (!completeRemainingSubtasks)
+        {
+            var done = subtasks.Count - incomplete.Count;
+            return ServiceResult.Fail(
+                $"Once tum alt gorevleri tamamlayin ({done}/{subtasks.Count}).");
+        }
+
+        foreach (var subtask in incomplete)
+        {
+            subtask.SubtaskStatus = SubtaskStatus.Done;
+            subtask.IsCompleted = true;
+            _unitOfWork.TaskItems.Update(subtask);
+            await LogActivityAsync(
+                subtask.TeamId,
+                subtask.Id,
+                userId,
+                TaskActivityAction.Updated,
+                null,
+                SubtaskStatusLabel(SubtaskStatus.Done));
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        return ServiceResult.Ok();
+    }
+
+    /// <summary>
+    /// Ana gorev yeniden acilinca tum alt gorevleri Todo'ya ceker (progress 0/N).
+    /// </summary>
+    private async Task ResetSubtasksProgressAsync(int parentTaskId, int userId)
+    {
+        var subtasks = await GetSubtasksAsync(parentTaskId);
+        var toReset = subtasks.Where(item => item.SubtaskStatus != SubtaskStatus.Todo).ToList();
+        if (toReset.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var subtask in toReset)
+        {
+            subtask.SubtaskStatus = SubtaskStatus.Todo;
+            subtask.IsCompleted = false;
+            _unitOfWork.TaskItems.Update(subtask);
+            await LogActivityAsync(
+                subtask.TeamId,
+                subtask.Id,
+                userId,
+                TaskActivityAction.Updated,
+                null,
+                SubtaskStatusLabel(SubtaskStatus.Todo));
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+    }
+
+    private async Task<List<TaskItem>> GetSubtasksAsync(int parentTaskId)
+    {
+        return (await _unitOfWork.TaskItems.GetAllAsync())
+            .Where(item => item.ParentTaskId == parentTaskId)
+            .OrderBy(item => item.DisplayOrder)
+            .ThenBy(item => item.Id)
+            .ToList();
+    }
+
+    private async Task<int> GetNextSubtaskDisplayOrderAsync(int parentTaskId)
+    {
+        var siblings = await GetSubtasksAsync(parentTaskId);
+        return siblings.Count == 0 ? 0 : siblings.Max(item => item.DisplayOrder) + 1;
+    }
+
+    private static string SubtaskStatusLabel(SubtaskStatus status) => status switch
+    {
+        SubtaskStatus.Todo => "Yapilacak",
+        SubtaskStatus.InProgress => "Devam ediyor",
+        SubtaskStatus.Done => "Tamamlandi",
+        _ => status.ToString()
+    };
+
+    private static (int Done, int Total) CountSubtaskProgress(IEnumerable<TaskItem> subtasks)
+    {
+        var list = subtasks.ToList();
+        var done = list.Count(item => item.SubtaskStatus == SubtaskStatus.Done);
+        return (done, list.Count);
+    }
+
     private async Task IndexTaskDocumentAsync(TaskItem task)
     {
+        if (task.ParentTaskId.HasValue)
+        {
+            _searchIndex.RemoveTask(task.Id);
+            return;
+        }
+
         var team = await _unitOfWork.Teams.GetByIdAsync(task.TeamId);
         if (team is null || team.IsPersonal)
         {
@@ -663,6 +1027,22 @@ public class TaskService : ITaskService
         var listDto = await MapToListDtoAsync(task);
         var createdBy = await _unitOfWork.Users.GetByIdAsync(task.CreatedByUserId);
 
+        string? parentTitle = null;
+        if (task.ParentTaskId.HasValue)
+        {
+            parentTitle = (await _unitOfWork.TaskItems.GetByIdAsync(task.ParentTaskId.Value))?.Title;
+        }
+
+        List<TaskListDto> subtaskDtos = [];
+        if (!task.ParentTaskId.HasValue)
+        {
+            var subtasks = await GetSubtasksAsync(task.Id);
+            foreach (var subtask in subtasks)
+            {
+                subtaskDtos.Add(await MapToListDtoAsync(subtask));
+            }
+        }
+
         return new TaskDetailDto
         {
             Id = listDto.Id,
@@ -686,7 +1066,13 @@ public class TaskService : ITaskService
             CreatedByEmail = createdBy?.Email ?? string.Empty,
             AssignedToUserId = listDto.AssignedToUserId,
             AssignedToEmail = listDto.AssignedToEmail,
-            AssignmentStatus = listDto.AssignmentStatus
+            AssignmentStatus = listDto.AssignmentStatus,
+            ParentTaskId = listDto.ParentTaskId,
+            ParentTaskTitle = parentTitle,
+            SubtaskStatus = listDto.SubtaskStatus,
+            SubtaskDoneCount = listDto.SubtaskDoneCount,
+            SubtaskTotal = listDto.SubtaskTotal,
+            Subtasks = subtaskDtos
         };
     }
 
@@ -720,6 +1106,15 @@ public class TaskService : ITaskService
 
         var team = await _unitOfWork.Teams.GetByIdAsync(task.TeamId);
 
+        var doneCount = 0;
+        var total = 0;
+        if (!task.ParentTaskId.HasValue)
+        {
+            var progress = CountSubtaskProgress(await GetSubtasksAsync(task.Id));
+            doneCount = progress.Done;
+            total = progress.Total;
+        }
+
         return new TaskListDto
         {
             Id = task.Id,
@@ -741,7 +1136,11 @@ public class TaskService : ITaskService
             BoardColumnTitle = boardColumnTitle,
             AssignedToUserId = task.AssignedToUserId,
             AssignedToEmail = assignedToEmail,
-            AssignmentStatus = task.AssignmentStatus
+            AssignmentStatus = task.AssignmentStatus,
+            ParentTaskId = task.ParentTaskId,
+            SubtaskStatus = task.SubtaskStatus,
+            SubtaskDoneCount = doneCount,
+            SubtaskTotal = total
         };
     }
 

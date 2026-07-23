@@ -3,6 +3,11 @@
     <div class="modal-header">
       @if (detail(); as headerTask) {
         <div class="detail-header-meta">
+          @if (headerTask.parentTaskId; as parentId) {
+            <button type="button" class="detail-parent-link" (click)="openSubtask(parentId)">
+              ← {{ headerTask.parentTaskTitle || ('Görev #' + parentId) }}
+            </button>
+          }
           <span class="detail-issue-key">Görev #{{ headerTask.id }}</span>
           <span class="detail-column-chip">{{ headerTask.boardColumnTitle }}</span>
         </div>
@@ -124,6 +129,96 @@
                 </div>
               }
             </section>
+
+            @if (!d.parentTaskId) {
+              <section class="jira-fold jira-fold-subtasks">
+                <button type="button" class="jira-fold-header" (click)="toggleSubtasksSection()" [attr.aria-expanded]="subtasksExpanded()">
+                  <svg class="jira-fold-chevron" viewBox="0 0 24 24" aria-hidden="true" [class.is-expanded]="subtasksExpanded()">
+                    <path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  <span class="jira-fold-title">Alt görevler</span>
+                  @if (d.subtaskTotal > 0) {
+                    <span class="jira-fold-count">{{ d.subtaskDoneCount }}/{{ d.subtaskTotal }}</span>
+                  }
+                </button>
+                @if (subtasksExpanded()) {
+                  <div class="jira-fold-body">
+                    @if (d.subtaskTotal > 0) {
+                      <div class="subtask-progress">
+                        <div class="subtask-progress-track">
+                          <div class="subtask-progress-fill" [style.width.%]="subtaskProgressPercent(d)"></div>
+                        </div>
+                        <span class="subtask-progress-label">%{{ subtaskProgressPercent(d) }} Tamamlandı</span>
+                      </div>
+                    }
+
+                    @if ((d.subtasks?.length ?? 0) > 0) {
+                      <ul class="subtask-list">
+                        @for (sub of d.subtasks; track sub.id) {
+                          <li class="subtask-row">
+                            <div class="subtask-main">
+                              <button
+                                type="button"
+                                class="subtask-title"
+                                [class.is-done]="sub.subtaskStatus === subtaskStatus.Done"
+                                (click)="openSubtask(sub.id)"
+                              >
+                                #{{ sub.id }} {{ sub.title }}
+                              </button>
+                              @if (sub.description) {
+                                <p class="subtask-desc">{{ sub.description }}</p>
+                              }
+                            </div>
+                            <select
+                              class="subtask-status"
+                              [class]="'status-' + (sub.subtaskStatus ?? 0)"
+                              [disabled]="updatingSubtaskId() === sub.id"
+                              [ngModel]="normalizeSubtaskStatus(sub.subtaskStatus)"
+                              (ngModelChange)="changeSubtaskStatus(sub.id, $event)"
+                            >
+                              <option [ngValue]="subtaskStatus.Todo">Yapılacak</option>
+                              <option [ngValue]="subtaskStatus.InProgress">Devam ediyor</option>
+                              <option [ngValue]="subtaskStatus.Done">Tamamlandı</option>
+                            </select>
+                          </li>
+                        }
+                      </ul>
+                    } @else {
+                      <p class="subtask-empty">Henüz alt görev yok.</p>
+                    }
+
+                    <form class="subtask-add" [formGroup]="subtaskForm" (ngSubmit)="addSubtask()">
+                      <input
+                        type="text"
+                        formControlName="title"
+                        maxlength="200"
+                        placeholder="Alt görev başlığı"
+                      />
+                      <textarea
+                        formControlName="description"
+                        rows="1"
+                        maxlength="4000"
+                        placeholder="Açıklama (isteğe bağlı)"
+                      ></textarea>
+                      <div class="subtask-add-row">
+                        <select formControlName="assignedToUserId">
+                          <option value="">Atanan yok</option>
+                          @for (member of members(); track member.userId) {
+                            <option [value]="member.userId">{{ memberName(member) }}</option>
+                          }
+                        </select>
+                        <button type="submit" class="primary-btn" [disabled]="addingSubtask() || subtaskForm.invalid">
+                          {{ addingSubtask() ? '...' : 'Ekle' }}
+                        </button>
+                      </div>
+                    </form>
+                    @if (subtaskError()) {
+                      <p class="inline-error">{{ subtaskError() }}</p>
+                    }
+                  </div>
+                }
+              </section>
+            }
 
             <section class="jira-fold jira-fold-attachments">
               <button type="button" class="jira-fold-header" (click)="toggleAttachmentsPanel()" [attr.aria-expanded]="attachmentsExpanded()">
@@ -406,6 +501,22 @@
 
           <aside class="jira-issue-sidebar">
             <div class="jira-sidebar-status">
+              @if (d.parentTaskId) {
+                <label class="field">
+                  <span>Alt görev durumu</span>
+                  <select
+                    class="subtask-status"
+                    [class]="'status-' + normalizeSubtaskStatus(d.subtaskStatus)"
+                    [disabled]="updatingSubtaskId() === d.id"
+                    [ngModel]="normalizeSubtaskStatus(d.subtaskStatus)"
+                    (ngModelChange)="changeOwnSubtaskStatus($event)"
+                  >
+                    <option [ngValue]="subtaskStatus.Todo">Yapılacak</option>
+                    <option [ngValue]="subtaskStatus.InProgress">Devam ediyor</option>
+                    <option [ngValue]="subtaskStatus.Done">Tamamlandı</option>
+                  </select>
+                </label>
+              } @else {
               <div class="jira-status-picker">
                 <button
                   type="button"
@@ -439,6 +550,7 @@
                   </div>
                 }
               </div>
+              }
             </div>
             <div class="jira-sidebar-actions">
               <button type="button" class="primary-btn" (click)="startDetailEdit()">Düzenle</button>

@@ -166,6 +166,15 @@ public class TodooDbContext : DbContext
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<TaskItem>()
+            .HasOne(task => task.ParentTask)
+            .WithMany(task => task.Subtasks)
+            .HasForeignKey(task => task.ParentTaskId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TaskItem>()
+            .HasIndex(task => task.ParentTaskId);
+
+        modelBuilder.Entity<TaskItem>()
             .HasQueryFilter(task => task.DeletedAt == null);
 
         modelBuilder.Entity<TaskActivityLog>()

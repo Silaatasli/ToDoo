@@ -29,6 +29,19 @@
     <p class="task-desc">{{ task().description }}</p>
   }
 
+  @if ((task().subtaskTotal ?? 0) > 0) {
+    <div class="task-subtask-progress" [attr.aria-label]="(task().subtaskDoneCount ?? 0) + '/' + task().subtaskTotal + ' alt görev'">
+      <div class="task-subtask-track">
+        <div
+          class="task-subtask-fill"
+          [style.width.%]="subtaskProgressPercent()"
+          [class.is-complete]="subtaskProgressPercent() === 100"
+        ></div>
+      </div>
+      <span class="task-subtask-count">{{ task().subtaskDoneCount ?? 0 }}/{{ task().subtaskTotal }}</span>
+    </div>
+  }
+
   <div class="task-meta">
     @if (task().categoryName) {
       <span class="task-category">{{ task().categoryName }}</span>
