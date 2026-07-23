@@ -34,6 +34,8 @@ public class TaskListDto
 
     public int BoardColumnId { get; set; }
 
+    public int DisplayOrder { get; set; }
+
     public string? BoardColumnTitle { get; set; }
 
     public int? AssignedToUserId { get; set; }

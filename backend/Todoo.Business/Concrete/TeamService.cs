@@ -759,6 +759,7 @@ public class TeamService : ITeamService
             BoardId = task.BoardId,
             BoardName = board.Name,
             BoardColumnId = task.BoardColumnId,
+            DisplayOrder = task.DisplayOrder,
             BoardColumnTitle = columnMap.GetValueOrDefault(task.BoardColumnId),
             AssignedToUserId = task.AssignedToUserId,
             AssignedToEmail = task.AssignedToUserId.HasValue
@@ -767,7 +768,10 @@ public class TeamService : ITeamService
             AssignmentStatus = task.AssignmentStatus,
             TeamName = team.Name,
             IsPersonalTeam = teamEntity?.IsPersonal ?? false
-        }).ToList();
+        })
+            .OrderBy(task => task.DisplayOrder)
+            .ThenBy(task => task.Id)
+            .ToList();
 
         return ServiceResult<TeamBoardDto>.Ok(new TeamBoardDto
         {

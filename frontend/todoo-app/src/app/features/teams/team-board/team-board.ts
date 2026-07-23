@@ -94,6 +94,7 @@ export class TeamBoard implements OnInit {
   readonly deletingTeam = signal(false);
   readonly draggedTaskId = signal<number | null>(null);
   readonly dragOverColumnId = signal<number | null>(null);
+  readonly dragInsertIndex = signal<number | null>(null);
   readonly remoteTaskDrags = signal<RemoteTaskDrag[]>([]);
   private dragOriginColumnId: number | null = null;
   private lastBroadcastHoverColumnId: number | null = null;
@@ -776,6 +777,7 @@ export class TeamBoard implements OnInit {
     this.draggedTaskId.set(task.id);
     this.dragOriginColumnId = sourceColumn?.id ?? null;
     this.dragOverColumnId.set(sourceColumn?.id ?? null);
+    this.dragInsertIndex.set(null);
     this.lastBroadcastHoverColumnId = sourceColumn?.id ?? null;
 
     const teamId = this.teamId();
@@ -793,6 +795,7 @@ export class TeamBoard implements OnInit {
 
     this.draggedTaskId.set(null);
     this.dragOverColumnId.set(null);
+    this.dragInsertIndex.set(null);
     this.dragOriginColumnId = null;
     this.lastBroadcastHoverColumnId = null;
   }
@@ -822,9 +825,72 @@ export class TeamBoard implements OnInit {
     this.dragOverColumnId.set(columnId);
   }
 
+  onTaskDragOver(event: DragEvent, columnId: number, overTask: TaskListItem): void {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (this.draggedColumnId() !== null || this.draggedTaskId() === null) {
+      return;
+    }
+
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+
+    const column = this.board()?.columns.find((item) => item.id === columnId);
+    if (!column) {
+      return;
+    }
+
+    const overIndex = column.tasks.findIndex((item) => item.id === overTask.id);
+    if (overIndex < 0) {
+      return;
+    }
+
+    // Suruklenen kartin uzerindeyken gostergeyi oynatma
+    if (overTask.id === this.draggedTaskId()) {
+      this.dragOverColumnId.set(columnId);
+      return;
+    }
+
+    const target = event.currentTarget as HTMLElement | null;
+    const rect = target?.getBoundingClientRect();
+    let rawIndex = overIndex;
+    if (rect && rect.height > 0) {
+      const ratio = (event.clientY - rect.top) / rect.height;
+      const current = this.dragInsertIndex();
+      const beforeIndex = this.toTargetIndex(column, this.draggedTaskId(), overIndex);
+      const afterIndex = this.toTargetIndex(column, this.draggedTaskId(), overIndex + 1);
+
+      // Orta %30'luk olu bolge: mevcut secimi koru (titremeyi onler)
+      if (ratio >= 0.35 && ratio <= 0.65 && current !== null) {
+        if (current === beforeIndex || current === afterIndex) {
+          this.dragOverColumnId.set(columnId);
+          return;
+        }
+      }
+
+      rawIndex = ratio < 0.5 ? overIndex : overIndex + 1;
+    }
+
+    const nextIndex = this.toTargetIndex(column, this.draggedTaskId(), rawIndex);
+    this.dragOverColumnId.set(columnId);
+    if (this.dragInsertIndex() !== nextIndex) {
+      this.dragInsertIndex.set(nextIndex);
+    }
+
+    const taskId = this.draggedTaskId();
+    const teamId = this.teamId();
+    if (taskId !== null && teamId !== null && this.lastBroadcastHoverColumnId !== columnId) {
+      this.lastBroadcastHoverColumnId = columnId;
+      void this.boardHub.notifyTaskDragMove(teamId, taskId, columnId);
+    }
+  }
+
   onColumnDragLeave(columnId: number): void {
     if (this.dragOverColumnId() === columnId) {
       this.dragOverColumnId.set(this.dragOriginColumnId);
+      this.dragInsertIndex.set(null);
     }
 
     if (this.dragOverReorderColumnId() === columnId) {
@@ -898,14 +964,28 @@ export class TeamBoard implements OnInit {
     }
 
     const taskId = this.draggedTaskId();
+    const insertIndex = this.dragInsertIndex();
     this.dragOverColumnId.set(null);
+    this.dragInsertIndex.set(null);
 
     if (taskId === null) {
       return;
     }
 
     const source = this.board()?.columns.find((c) => c.tasks.some((t) => t.id === taskId));
-    if (!source || source.id === column.id) {
+    const targetColumn = this.board()?.columns.find((c) => c.id === column.id);
+    if (!source || !targetColumn) {
+      return;
+    }
+
+    const targetIndex =
+      insertIndex ?? this.toTargetIndex(targetColumn, taskId, targetColumn.tasks.length);
+    const sourceIndex = source.tasks.findIndex((t) => t.id === taskId);
+
+    if (source.id === column.id && sourceIndex === targetIndex) {
+      this.draggedTaskId.set(null);
+      this.dragOriginColumnId = null;
+      this.lastBroadcastHoverColumnId = null;
       return;
     }
 
@@ -913,14 +993,36 @@ export class TeamBoard implements OnInit {
     this.dragOriginColumnId = null;
     this.lastBroadcastHoverColumnId = null;
 
-    this.moveTaskLocally(taskId, source.id, column.id);
+    this.moveTaskLocally(taskId, source.id, column.id, targetIndex);
 
-    this.taskService.moveToColumn(taskId, column.id).subscribe({
+    this.taskService.moveToColumn(taskId, column.id, targetIndex).subscribe({
       error: () => this.refreshBoardSilent()
     });
   }
 
-  private moveTaskLocally(taskId: number, fromColumnId: number, toColumnId: number): void {
+  /** rawIndex: tasinan kart dahil listedeki hedef konum; donen deger kaldirma sonrasi final indeks. */
+  private toTargetIndex(
+    column: BoardColumnWithTasks,
+    draggedTaskId: number | null,
+    rawIndex: number
+  ): number {
+    const fromIndex =
+      draggedTaskId === null ? -1 : column.tasks.findIndex((item) => item.id === draggedTaskId);
+    let index = rawIndex;
+    if (fromIndex >= 0 && fromIndex < index) {
+      index -= 1;
+    }
+
+    const max = column.tasks.length - (fromIndex >= 0 ? 1 : 0);
+    return Math.max(0, Math.min(index, max));
+  }
+
+  private moveTaskLocally(
+    taskId: number,
+    fromColumnId: number,
+    toColumnId: number,
+    targetIndex: number
+  ): void {
     const current = this.board();
     if (!current) {
       return;
@@ -948,12 +1050,23 @@ export class TeamBoard implements OnInit {
       ...moved,
       boardColumnId: targetColumn.id,
       boardColumnTitle: targetColumn.title,
-      isCompleted: targetColumn.isCompletedColumn
+      isCompleted: targetColumn.isCompletedColumn,
+      displayOrder: targetIndex
     };
 
-    const withMoved = columns.map((col) =>
-      col.id === toColumnId ? { ...col, tasks: [...col.tasks, movedTask] } : col
-    );
+    const withMoved = columns.map((col) => {
+      if (col.id !== toColumnId) {
+        return col;
+      }
+
+      const tasks = [...col.tasks];
+      const index = Math.max(0, Math.min(targetIndex, tasks.length));
+      tasks.splice(index, 0, movedTask);
+      return {
+        ...col,
+        tasks: tasks.map((task, order) => ({ ...task, displayOrder: order }))
+      };
+    });
 
     this.board.set({ ...current, columns: withMoved });
   }

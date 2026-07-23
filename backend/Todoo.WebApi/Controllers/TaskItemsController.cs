@@ -88,7 +88,7 @@ public class TaskItemsController : ControllerBase
             return Unauthorized(new { success = false, message = "Gecerli bir kullanici bilgisi bulunamadi." });
         }
 
-        var result = await _taskService.MoveTaskToColumnAsync(id, request.BoardColumnId, userId);
+        var result = await _taskService.MoveTaskToColumnAsync(id, request.BoardColumnId, userId, request.TargetIndex);
         return result.ToActionResult();
     }
 

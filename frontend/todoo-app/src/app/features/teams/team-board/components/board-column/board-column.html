@@ -74,26 +74,33 @@
       }
     }
 
-    @for (task of column().tasks; track task.id) {
+    @for (task of column().tasks; track task.id; let taskIndex = $index) {
       @if (!isRemoteDraggingTask(task.id)) {
-        <app-task-card
-          [task]="task"
-          [dragging]="draggedTaskId() === task.id"
-          [remoteDragging]="!!remoteDragInPlace(task.id)"
-          [remoteDragLabel]="remoteDragInPlace(task.id) ? remoteDragLabelFn()(remoteDragInPlace(task.id)!.userId) : null"
-          [photoUrl]="photoUrlFn()(task.assignedToUserId)"
-          [pendingAssignment]="isAssignmentPending(task)"
-          (open)="openTask.emit(task)"
-          (delete)="deleteTask.emit(task)"
-          (dragStart)="taskDragStart.emit({ event: $event, task })"
-          (dragEnd)="taskDragEnd.emit()"
-        />
+        <div
+          class="task-slot"
+          [class.drop-before]="showInsertLineBefore(taskIndex)"
+          (dragover)="taskDragOver.emit({ event: $event, task })"
+        >
+          <app-task-card
+            [task]="task"
+            [dragging]="draggedTaskId() === task.id"
+            [remoteDragging]="!!remoteDragInPlace(task.id)"
+            [remoteDragLabel]="remoteDragInPlace(task.id) ? remoteDragLabelFn()(remoteDragInPlace(task.id)!.userId) : null"
+            [photoUrl]="photoUrlFn()(task.assignedToUserId)"
+            [pendingAssignment]="isAssignmentPending(task)"
+            (open)="openTask.emit(task)"
+            (delete)="deleteTask.emit(task)"
+            (dragStart)="taskDragStart.emit({ event: $event, task })"
+            (dragEnd)="taskDragEnd.emit()"
+          />
+        </div>
       }
     } @empty {
       @if (remoteDropPreviews().length === 0) {
         <p class="column-empty">Görev yok</p>
       }
     }
+    <div class="column-drop-end" [class.drop-before]="showInsertLineAtEnd()" aria-hidden="true"></div>
   </div>
 
   <button type="button" class="add-task-btn" (click)="addTask.emit()">+ Görev ekle</button>

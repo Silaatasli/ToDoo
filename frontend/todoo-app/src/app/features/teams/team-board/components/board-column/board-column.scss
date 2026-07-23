@@ -169,6 +169,45 @@
   gap: 0.5rem;
 }
 
+.task-slot {
+  position: relative;
+  display: block;
+
+  &.drop-before::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -0.28rem;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-soft);
+    pointer-events: none;
+    z-index: 3;
+  }
+}
+
+.column-drop-end {
+  position: relative;
+  height: 0;
+  flex-shrink: 0;
+
+  &.drop-before::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -0.15rem;
+    height: 3px;
+    border-radius: 999px;
+    background: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-soft);
+    pointer-events: none;
+    z-index: 3;
+  }
+}
+
 .column-empty {
   margin: 0.5rem 0;
   text-align: center;

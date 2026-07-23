@@ -13,6 +13,9 @@ public class TaskItem
 
     public int BoardColumnId { get; set; }
 
+    /// <summary>Sutun icindeki sira (0 tabanli).</summary>
+    public int DisplayOrder { get; set; }
+
     public int CreatedByUserId { get; set; }
 
     public int? AssignedToUserId { get; set; }

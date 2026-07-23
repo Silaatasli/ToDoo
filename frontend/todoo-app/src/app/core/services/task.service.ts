@@ -30,8 +30,11 @@ export class TaskService {
     return this.http.put<TaskListItem>(`${this.baseUrl}/${taskId}`, request);
   }
 
-  moveToColumn(taskId: number, boardColumnId: number): Observable<TaskListItem> {
-    return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/column`, { boardColumnId });
+  moveToColumn(taskId: number, boardColumnId: number, targetIndex?: number | null): Observable<TaskListItem> {
+    return this.http.patch<TaskListItem>(`${this.baseUrl}/${taskId}/column`, {
+      boardColumnId,
+      targetIndex: targetIndex ?? null
+    });
   }
 
   complete(taskId: number): Observable<TaskListItem> {

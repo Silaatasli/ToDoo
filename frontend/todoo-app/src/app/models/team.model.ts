@@ -152,6 +152,7 @@ export interface TaskListItem {
   isPersonalTeam: boolean;
   boardId: number;
   boardColumnId: number;
+  displayOrder: number;
   boardColumnTitle?: string | null;
   assignedToUserId?: number | null;
   assignedToEmail?: string | null;

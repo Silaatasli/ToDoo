@@ -10,7 +10,7 @@ public interface ITaskService
     Task<ServiceResult<IEnumerable<TaskActivityLogDto>>> GetTaskActivityAsync(int taskId, int userId);
     Task<ServiceResult<TaskListDto>> CreateTeamTaskAsync(TaskItem task, int teamId, int boardId, int? boardColumnId, int? assignedToUserId, int userId);
     Task<ServiceResult<TaskListDto>> UpdateTaskAsync(TaskItem task, int userId);
-    Task<ServiceResult<TaskListDto>> MoveTaskToColumnAsync(int taskId, int boardColumnId, int userId);
+    Task<ServiceResult<TaskListDto>> MoveTaskToColumnAsync(int taskId, int boardColumnId, int userId, int? targetIndex = null);
     Task<ServiceResult<TaskListDto>> CompleteTaskAsync(int taskId, int userId);
     Task<ServiceResult<TaskListDto>> ReopenTaskAsync(int taskId, int userId);
     Task<ServiceResult<TaskListDto>> AssignTaskAsync(int taskId, int? assignedToUserId, int userId);

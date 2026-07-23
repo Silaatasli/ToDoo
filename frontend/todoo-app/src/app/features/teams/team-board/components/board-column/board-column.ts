@@ -19,6 +19,7 @@ export class BoardColumnComponent {
   readonly editColumnError = input<string | null>(null);
   readonly draggedTaskId = input<number | null>(null);
   readonly dragOverColumnId = input<number | null>(null);
+  readonly dragInsertIndex = input<number | null>(null);
   readonly dragOverReorderColumnId = input<number | null>(null);
   readonly remoteTaskDrags = input<RemoteTaskDrag[]>([]);
   readonly taskByIdFn = input.required<(id: number) => TaskListItem | null>();
@@ -38,6 +39,7 @@ export class BoardColumnComponent {
   readonly deleteTask = output<TaskListItem>();
   readonly taskDragStart = output<{ event: DragEvent; task: TaskListItem }>();
   readonly taskDragEnd = output<void>();
+  readonly taskDragOver = output<{ event: DragEvent; task: TaskListItem }>();
 
   readonly assignmentStatus = AssignmentStatus;
   readonly priorityLabel = priorityLabel;
@@ -70,5 +72,33 @@ export class BoardColumnComponent {
 
   isAssignmentPending(task: TaskListItem): boolean {
     return task.assignmentStatus === AssignmentStatus.Pending;
+  }
+
+  showInsertLineBefore(taskIndex: number): boolean {
+    return this.visualInsertIndex() === taskIndex;
+  }
+
+  showInsertLineAtEnd(): boolean {
+    const visual = this.visualInsertIndex();
+    return visual !== null && visual >= this.column().tasks.length;
+  }
+
+  /** Suruklenen kart hala listede iken gosterge konumunu hesapla. */
+  private visualInsertIndex(): number | null {
+    if (this.dragOverColumnId() !== this.column().id || this.draggedTaskId() === null) {
+      return null;
+    }
+
+    const target = this.dragInsertIndex();
+    if (target === null) {
+      return null;
+    }
+
+    const fromIndex = this.column().tasks.findIndex((item) => item.id === this.draggedTaskId());
+    if (fromIndex < 0) {
+      return target;
+    }
+
+    return target >= fromIndex ? target + 1 : target;
   }
 }

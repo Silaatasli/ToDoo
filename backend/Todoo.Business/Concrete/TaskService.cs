@@ -146,6 +146,7 @@ public class TaskService : ITaskService
         task.TeamId = teamId;
         task.BoardId = boardId;
         task.BoardColumnId = targetColumn.Id;
+        task.DisplayOrder = await GetNextDisplayOrderAsync(targetColumn.Id);
         task.CreatedByUserId = userId;
         task.AssignedToUserId = assignedToUserId;
         task.CategoryId = categoryResult.Data;
@@ -211,7 +212,11 @@ public class TaskService : ITaskService
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(existingTask));
     }
 
-    public async Task<ServiceResult<TaskListDto>> MoveTaskToColumnAsync(int taskId, int boardColumnId, int userId)
+    public async Task<ServiceResult<TaskListDto>> MoveTaskToColumnAsync(
+        int taskId,
+        int boardColumnId,
+        int userId,
+        int? targetIndex = null)
     {
         var taskResult = await GetTaskIfMemberAsync(taskId, userId);
         if (!taskResult.Success)
@@ -234,7 +239,7 @@ public class TaskService : ITaskService
                 $"boardColumnId {boardColumnId} bu gorevin panosuna (boardId: {task.BoardId}) ait degil.");
         }
 
-        return await ApplyColumnChangeAsync(task, newColumn, userId);
+        return await ApplyColumnChangeAsync(task, newColumn, userId, targetIndex);
     }
 
     public async Task<ServiceResult<TaskListDto>> CompleteTaskAsync(int taskId, int userId)
@@ -474,6 +479,7 @@ public class TaskService : ITaskService
 
         task.DeletedAt = null;
         task.DeletedByUserId = null;
+        task.DisplayOrder = await GetNextDisplayOrderAsync(task.BoardColumnId);
         _unitOfWork.TaskItems.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
@@ -516,29 +522,106 @@ public class TaskService : ITaskService
     private async Task<ServiceResult<TaskListDto>> ApplyColumnChangeAsync(
         TaskItem task,
         TeamBoardColumn newColumn,
-        int userId)
+        int userId,
+        int? targetIndex = null)
     {
-        var oldColumn = await _unitOfWork.TeamBoardColumns.GetByIdAsync(task.BoardColumnId);
+        var oldColumnId = task.BoardColumnId;
+        var oldColumn = await _unitOfWork.TeamBoardColumns.GetByIdAsync(oldColumnId);
         var oldTitle = oldColumn?.Title;
+        var sameColumn = oldColumnId == newColumn.Id;
+
+        var currentIndex = sameColumn
+            ? (await GetOrderedColumnTasksAsync(oldColumnId)).FindIndex(item => item.Id == task.Id)
+            : -1;
+
+        var siblings = (await GetOrderedColumnTasksAsync(newColumn.Id))
+            .Where(item => item.Id != task.Id)
+            .ToList();
+
+        var insertAt = targetIndex ?? siblings.Count;
+        if (insertAt < 0)
+        {
+            insertAt = 0;
+        }
+        if (insertAt > siblings.Count)
+        {
+            insertAt = siblings.Count;
+        }
+
+        if (sameColumn && currentIndex == insertAt)
+        {
+            return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
+        }
 
         task.BoardColumnId = newColumn.Id;
         task.IsCompleted = newColumn.IsCompletedColumn;
-
+        task.DisplayOrder = insertAt;
         _unitOfWork.TaskItems.Update(task);
+
+        siblings.Insert(insertAt, task);
+        for (var i = 0; i < siblings.Count; i++)
+        {
+            if (siblings[i].DisplayOrder == i)
+            {
+                continue;
+            }
+
+            siblings[i].DisplayOrder = i;
+            _unitOfWork.TaskItems.Update(siblings[i]);
+        }
+
+        if (!sameColumn)
+        {
+            await CompactColumnOrdersAsync(oldColumnId);
+        }
+
         await _unitOfWork.SaveChangesAsync();
 
-        await LogActivityAsync(
-            task.TeamId,
-            task.Id,
-            userId,
-            TaskActivityAction.ColumnChanged,
-            oldTitle,
-            newColumn.Title);
+        if (!sameColumn)
+        {
+            await LogActivityAsync(
+                task.TeamId,
+                task.Id,
+                userId,
+                TaskActivityAction.ColumnChanged,
+                oldTitle,
+                newColumn.Title);
+        }
 
         await _boardNotifier.NotifyBoardChangedAsync(task.TeamId, TeamBoardChangeTypes.TaskMoved, userId, task.Id, task.BoardId);
         await IndexTaskDocumentAsync(task);
 
         return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
+    }
+
+    private async Task<List<TaskItem>> GetOrderedColumnTasksAsync(int boardColumnId)
+    {
+        return (await _unitOfWork.TaskItems.GetAllAsync())
+            .Where(item => item.BoardColumnId == boardColumnId)
+            .OrderBy(item => item.DisplayOrder)
+            .ThenBy(item => item.Id)
+            .ToList();
+    }
+
+    private async Task CompactColumnOrdersAsync(int boardColumnId)
+    {
+        var remaining = await GetOrderedColumnTasksAsync(boardColumnId);
+        for (var i = 0; i < remaining.Count; i++)
+        {
+            if (remaining[i].DisplayOrder == i)
+            {
+                continue;
+            }
+
+            remaining[i].DisplayOrder = i;
+            _unitOfWork.TaskItems.Update(remaining[i]);
+        }
+    }
+
+    private async Task<int> GetNextDisplayOrderAsync(int boardColumnId)
+    {
+        var tasks = await GetOrderedColumnTasksAsync(boardColumnId);
+        return tasks.Count == 0 ? 0 : tasks.Max(item => item.DisplayOrder) + 1;
     }
 
     private async Task IndexTaskDocumentAsync(TaskItem task)
@@ -654,6 +737,7 @@ public class TaskService : ITaskService
             BoardId = task.BoardId,
             BoardName = boardName,
             BoardColumnId = task.BoardColumnId,
+            DisplayOrder = task.DisplayOrder,
             BoardColumnTitle = boardColumnTitle,
             AssignedToUserId = task.AssignedToUserId,
             AssignedToEmail = assignedToEmail,

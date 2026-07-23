@@ -213,6 +213,7 @@
             [editColumnError]="editColumnError()"
             [draggedTaskId]="draggedTaskId()"
             [dragOverColumnId]="dragOverColumnId()"
+            [dragInsertIndex]="dragInsertIndex()"
             [dragOverReorderColumnId]="dragOverReorderColumnId()"
             [remoteTaskDrags]="remoteTaskDrags()"
             [taskByIdFn]="taskByIdFn"
@@ -231,6 +232,7 @@
             (deleteTask)="deleteTask($event)"
             (taskDragStart)="onDragStart($event.event, $event.task)"
             (taskDragEnd)="onDragEnd()"
+            (taskDragOver)="onTaskDragOver($event.event, column.id, $event.task)"
           />
         }
 
