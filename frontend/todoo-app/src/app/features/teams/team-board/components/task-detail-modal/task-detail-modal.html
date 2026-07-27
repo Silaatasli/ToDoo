@@ -593,6 +593,16 @@
                     <dd>{{ d.dueDate ? (d.dueDate | date: 'dd MMM yyyy') : 'Yok' }}</dd>
                   </div>
                   <div class="jira-detail-row">
+                    <dt>Çözülme tarihi</dt>
+                    <dd>
+                      @if (d.completedAt) {
+                        {{ toLocalDate(d.completedAt) | date: 'dd MMM yyyy, HH:mm' }}
+                      } @else {
+                        —
+                      }
+                    </dd>
+                  </div>
+                  <div class="jira-detail-row">
                     <dt>Oluşturan</dt>
                     <dd>{{ d.createdByEmail }}</dd>
                   </div>

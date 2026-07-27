@@ -20,6 +20,9 @@ public class TaskListDto
 
     public DateTime? DueDate { get; set; }
 
+    /// <summary>Tamamlanma / cozulme tarihi (UTC).</summary>
+    public DateTime? CompletedAt { get; set; }
+
     public bool IsCompleted { get; set; }
 
     public int TeamId { get; set; }

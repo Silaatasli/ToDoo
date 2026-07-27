@@ -279,6 +279,15 @@ public class TaskService : ITaskService
 
         task.SubtaskStatus = status;
         task.IsCompleted = status == SubtaskStatus.Done;
+        if (status == SubtaskStatus.Done)
+        {
+            task.CompletedAt ??= DateTime.UtcNow;
+        }
+        else
+        {
+            task.CompletedAt = null;
+        }
+
         _unitOfWork.TaskItems.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
@@ -768,8 +777,21 @@ public class TaskService : ITaskService
             return ServiceResult<TaskListDto>.Ok(await MapToListDtoAsync(task));
         }
 
+        var wasCompleted = task.IsCompleted;
         task.BoardColumnId = newColumn.Id;
         task.IsCompleted = newColumn.IsCompletedColumn;
+        if (newColumn.IsCompletedColumn)
+        {
+            if (!wasCompleted)
+            {
+                task.CompletedAt = DateTime.UtcNow;
+            }
+        }
+        else if (wasCompleted)
+        {
+            task.CompletedAt = null;
+        }
+
         task.DisplayOrder = insertAt;
         _unitOfWork.TaskItems.Update(task);
 
@@ -854,6 +876,8 @@ public class TaskService : ITaskService
         }
 
         var allDone = subtasks.All(item => item.SubtaskStatus == SubtaskStatus.Done);
+        var anyInProgress = subtasks.Any(item => item.SubtaskStatus == SubtaskStatus.InProgress);
+
         if (allDone && !parent.IsCompleted)
         {
             var columns = await GetBoardColumnsAsync(parent.BoardId);
@@ -869,10 +893,41 @@ public class TaskService : ITaskService
         if (!allDone && parent.IsCompleted)
         {
             var columns = await GetBoardColumnsAsync(parent.BoardId);
-            var activeColumn = columns.FirstOrDefault(column => !column.IsCompletedColumn);
-            if (activeColumn is not null)
+            var inProgressColumn = FindInProgressColumn(columns);
+            if (inProgressColumn is not null)
             {
-                await ApplyColumnChangeAsync(parent, activeColumn, userId);
+                await ApplyColumnChangeAsync(parent, inProgressColumn, userId);
+            }
+            return;
+        }
+
+        if (anyInProgress && !parent.IsCompleted)
+        {
+            var columns = await GetBoardColumnsAsync(parent.BoardId);
+            var currentColumn = columns.FirstOrDefault(c => c.Id == parent.BoardColumnId);
+            var inProgressColumn = FindInProgressColumn(columns);
+            if (inProgressColumn is not null && currentColumn?.Id != inProgressColumn.Id)
+            {
+                await ApplyColumnChangeAsync(parent, inProgressColumn, userId);
+            }
+
+            return;
+        }
+
+        // Tek alt gorev Yapilacak'a donduyse ana gorevi In Progress'ten Todo sutununa cek.
+        if (subtasks.Count == 1
+            && subtasks[0].SubtaskStatus == SubtaskStatus.Todo
+            && !parent.IsCompleted)
+        {
+            var columns = await GetBoardColumnsAsync(parent.BoardId);
+            var inProgressColumn = FindInProgressColumn(columns);
+            var todoColumn = FindTodoColumn(columns);
+            if (todoColumn is not null
+                && inProgressColumn is not null
+                && parent.BoardColumnId == inProgressColumn.Id
+                && todoColumn.Id != inProgressColumn.Id)
+            {
+                await ApplyColumnChangeAsync(parent, todoColumn, userId);
             }
         }
     }
@@ -909,6 +964,7 @@ public class TaskService : ITaskService
         {
             subtask.SubtaskStatus = SubtaskStatus.Done;
             subtask.IsCompleted = true;
+            subtask.CompletedAt ??= DateTime.UtcNow;
             _unitOfWork.TaskItems.Update(subtask);
             await LogActivityAsync(
                 subtask.TeamId,
@@ -939,6 +995,7 @@ public class TaskService : ITaskService
         {
             subtask.SubtaskStatus = SubtaskStatus.Todo;
             subtask.IsCompleted = false;
+            subtask.CompletedAt = null;
             _unitOfWork.TaskItems.Update(subtask);
             await LogActivityAsync(
                 subtask.TeamId,
@@ -1061,6 +1118,7 @@ public class TaskService : ITaskService
             CreatedDate = task.CreatedDate,
             StartDate = listDto.StartDate,
             DueDate = listDto.DueDate,
+            CompletedAt = listDto.CompletedAt,
             IsCompleted = listDto.IsCompleted,
             CreatedByUserId = task.CreatedByUserId,
             CreatedByEmail = createdBy?.Email ?? string.Empty,
@@ -1125,6 +1183,7 @@ public class TaskService : ITaskService
             Priority = task.Priority,
             StartDate = task.StartDate,
             DueDate = task.DueDate,
+            CompletedAt = task.CompletedAt,
             IsCompleted = task.IsCompleted,
             TeamId = task.TeamId,
             TeamName = team?.Name,
@@ -1180,6 +1239,24 @@ public class TaskService : ITaskService
 
         var activeColumns = columns.Where(column => !column.IsCompletedColumn).ToList();
         return activeColumns.Count > 1 ? activeColumns[1] : activeColumns.FirstOrDefault();
+    }
+
+    private static TeamBoardColumn? FindTodoColumn(IReadOnlyList<TeamBoardColumn> columns)
+    {
+        var todo = columns.FirstOrDefault(column =>
+            !column.IsCompletedColumn
+            && (column.Title.Contains("yapilacak", StringComparison.OrdinalIgnoreCase)
+                || column.Title.Contains("yapılacak", StringComparison.OrdinalIgnoreCase)
+                || column.Title.Contains("todo", StringComparison.OrdinalIgnoreCase)
+                || column.Title.Contains("tum", StringComparison.OrdinalIgnoreCase)
+                || column.Title.Contains("tüm", StringComparison.OrdinalIgnoreCase)));
+
+        if (todo is not null)
+        {
+            return todo;
+        }
+
+        return columns.FirstOrDefault(column => !column.IsCompletedColumn);
     }
 
     private async Task<ServiceResult<int>> ResolveCategoryIdAsync(int? categoryId)

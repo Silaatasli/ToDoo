@@ -765,6 +765,7 @@ public class TeamService : ITeamService
                 Priority = task.Priority,
                 StartDate = task.StartDate,
                 DueDate = task.DueDate,
+                CompletedAt = task.CompletedAt,
                 IsCompleted = task.IsCompleted,
                 TeamId = task.TeamId,
                 BoardId = task.BoardId,

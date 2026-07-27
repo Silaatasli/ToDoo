@@ -68,6 +68,9 @@ public class TaskItem
 
     public bool IsCompleted { get; set; }
 
+    /// <summary>Tamamlandi sutununa alindigi an (UTC). SLA hesabi icin.</summary>
+    public DateTime? CompletedAt { get; set; }
+
     public DateTime? DeletedAt { get; set; }
 
     public int? DeletedByUserId { get; set; }

@@ -3,7 +3,7 @@
     <header class="page-toolbar">
       <div>
         <h1>{{ team()?.name ?? 'Takım raporları' }}</h1>
-        <p>Bu takımın görev durumu ve kategori kullanımı özeti.</p>
+        <p>Bu takımın görev durumu, SLA performansı ve kategori kullanımı özeti.</p>
       </div>
       @if (teamId()) {
         <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">Panoya dön</a>
@@ -54,6 +54,116 @@
           <strong class="card-value text">{{ data.mostUsedCategoryName || 'Henüz kategori yok' }}</strong>
         </article>
       </section>
+
+      @if (displayedSla(); as sla) {
+        <section class="sla-section">
+          <div class="sla-section-head">
+            <h2>
+              @if (isViewingOwnSla()) {
+                Bu takımdaki SLA performansım
+              } @else {
+                Seçili üyenin SLA detayı
+              }
+            </h2>
+            <p>
+              {{ sla.displayName ? sla.displayName + ' · ' : '' }}
+              @if (isViewingOwnSla()) {
+                Due date olan ve sana atanmış ana görevler
+              } @else {
+                Due date olan ve bu üyeye atanmış ana görevler
+              }
+              · öncelik ağırlıklı uyum
+            </p>
+          </div>
+
+          <div class="sla-grid">
+            <article class="sla-hero-card">
+              <span class="card-label">SLA uyumu</span>
+              <strong class="sla-hero-value">{{ slaComplianceLabel() }}</strong>
+              <p class="sla-hero-note">
+                @if (sla.compliancePercent == null) {
+                  Henüz sonuçlanmış (Met/Breached) görev yok.
+                } @else {
+                  Zamanında tamamlananların öncelik ağırlıklı oranı.
+                }
+              </p>
+            </article>
+
+            <button
+              type="button"
+              class="summary-card clickable success"
+              [disabled]="sla.metCount === 0"
+              (click)="openSlaMetModal()"
+            >
+              <span class="card-label">Zamanında (Met)</span>
+              <strong class="card-value success">{{ sla.metCount }}</strong>
+            </button>
+
+            <button
+              type="button"
+              class="summary-card clickable danger"
+              [disabled]="sla.breachedCount === 0"
+              (click)="openSlaBreachedModal()"
+            >
+              <span class="card-label">İhlal (Breached)</span>
+              <strong class="card-value">{{ sla.breachedCount }}</strong>
+            </button>
+
+            <article class="summary-card">
+              <span class="card-label">Takipte (OnTrack)</span>
+              <strong class="card-value">{{ sla.onTrackCount }}</strong>
+            </article>
+          </div>
+        </section>
+      }
+
+      @if (isTeamLeader() && membersSla(); as teamSla) {
+        <section class="sla-members-section">
+          <div class="sla-section-head">
+            <h2>Takım üyeleri SLA özeti</h2>
+            <p>Bir üyeye tıklayarak üstte SLA detaylarını açabilirsin.</p>
+          </div>
+
+          @if (teamSla.members.length === 0) {
+            <p class="sla-members-empty">Üye bulunamadı.</p>
+          } @else {
+            <div class="sla-members-table-wrap">
+              <table class="sla-members-table">
+                <thead>
+                  <tr>
+                    <th>Üye</th>
+                    <th>SLA %</th>
+                    <th>Met</th>
+                    <th>Breached</th>
+                    <th>OnTrack</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (member of teamSla.members; track member.userId) {
+                    <tr
+                      class="member-row"
+                      [class.is-me]="member.userId === currentUserId()"
+                      [class.is-selected]="member.userId === displayedSla()?.userId"
+                      (click)="selectMemberSla(member.userId)"
+                    >
+                      <td>
+                        {{ member.displayName || ('Kullanıcı #' + member.userId) }}
+                        @if (member.userId === currentUserId()) {
+                          <span class="me-badge">sen</span>
+                        }
+                      </td>
+                      <td>{{ member.compliancePercent == null ? '—' : member.compliancePercent + '%' }}</td>
+                      <td>{{ member.metCount }}</td>
+                      <td>{{ member.breachedCount }}</td>
+                      <td>{{ member.onTrackCount }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
 
       <section class="charts-grid">
         <section class="progress-card">

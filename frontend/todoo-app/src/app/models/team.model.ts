@@ -126,6 +126,7 @@ export interface TaskDetail {
   createdDate: string;
   startDate: string;
   dueDate?: string | null;
+  completedAt?: string | null;
   isCompleted: boolean;
   createdByUserId: number;
   createdByEmail: string;
@@ -158,6 +159,7 @@ export interface TaskListItem {
   priority: Priority;
   startDate: string;
   dueDate?: string | null;
+  completedAt?: string | null;
   isCompleted: boolean;
   teamId: number;
   teamName?: string | null;
