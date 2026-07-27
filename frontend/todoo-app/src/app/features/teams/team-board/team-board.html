@@ -1,167 +1,171 @@
 ﻿<app-layout>
-  <main class="board-page">
-    <header class="board-toolbar">
-      <div class="board-title">
-        <div class="board-heading">
-          <p class="team-name-label">{{ board()?.teamName ?? team()?.name ?? 'Takım' }}</p>
-          <div class="board-switcher" (click)="$event.stopPropagation()">
-            <button
-              type="button"
-              class="board-switcher-trigger"
-              [attr.aria-expanded]="showBoardMenu()"
-              (click)="toggleBoardMenu()"
-            >
-              <h1>{{ board()?.boardName ?? 'Pano' }}</h1>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                <path d="M6 9l6 6 6-6" />
-              </svg>
-            </button>
+  <app-team-workspace-shell
+    [teamId]="teamId()"
+    [teamName]="board()?.teamName ?? team()?.name ?? 'Takım'"
+    activeTab="pano"
+    (openMembers)="openMembersModal()"
+  >
+    <div workspaceActions>
+      @if (isLeader()) {
+        <button type="button" class="danger-btn" (click)="deleteTeam()" [disabled]="deletingTeam()">
+          {{ deletingTeam() ? 'Siliniyor...' : 'Takımı sil' }}
+        </button>
+      }
+    </div>
 
-            @if (showBoardMenu()) {
-              <div class="board-switcher-menu">
-                @for (b of boards(); track b.id) {
-                  <button
-                    type="button"
-                    class="board-switcher-option"
-                    [class.active]="b.id === boardId()"
-                    (click)="selectBoard(b)"
-                  >
-                    {{ b.name }}
-                  </button>
-                }
-                @if (isLeader()) {
-                  <button type="button" class="board-switcher-option create" (click)="openBoardModal()">
-                    + Yeni pano
-                  </button>
-                }
-              </div>
-            }
-          </div>
-        </div>
-        @if (team()) {
-          <div class="assignee-filter">
-            <button
-              type="button"
-              class="assignee-filter-trigger"
-              [class.active]="assigneeFilter() !== 'all'"
-              [attr.aria-expanded]="showAssigneeFilterMenu()"
-              title="Atanan kişiye göre filtrele"
-              (click)="$event.stopPropagation(); toggleAssigneeFilterMenu()"
-            >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M3 5h18" />
-                <path d="M7 12h10" />
-                <path d="M10 19h4" />
-              </svg>
-            
-            </button>
-
-            <div class="member-chips" role="group" aria-label="Hızlı atanan kişi filtresi">
+    <main class="board-page">
+      <header class="board-toolbar">
+        <div class="board-title">
+          <div class="board-heading">
+            <div class="board-switcher" (click)="$event.stopPropagation()">
               <button
                 type="button"
-                class="chip-avatar unassigned"
-                [class.selected]="isUnassignedFilterActive()"
-                [title]="
-                  isUnassignedFilterActive()
-                    ? 'Atanmamış görev filtresini kaldır'
-                    : 'Atanmamış görevleri filtrele'
-                "
-                [attr.aria-pressed]="isUnassignedFilterActive()"
-                (click)="toggleUnassignedFilter()"
+                class="board-switcher-trigger"
+                [attr.aria-expanded]="showBoardMenu()"
+                (click)="toggleBoardMenu()"
               >
-                —
+                <h2>{{ board()?.boardName ?? 'Pano' }}</h2>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
               </button>
-              @for (m of team()!.members; track m.userId) {
-                <button
-                  type="button"
-                  class="chip-avatar"
-                  [class.leader]="m.isLeader"
-                  [class.selected]="isAssigneeFilterActive(m.userId)"
-                  [class.has-photo]="!!memberPhotoUrl(m.userId)"
-                  [title]="
-                    isAssigneeFilterActive(m.userId)
-                      ? memberName(m) + ' filtresini kaldır'
-                      : memberName(m) + ' kişisine atanan görevleri filtrele'
-                  "
-                  [attr.aria-pressed]="isAssigneeFilterActive(m.userId)"
-                  (click)="toggleAssigneeFilter(m.userId)"
-                >
-                  @if (memberPhotoUrl(m.userId); as photoUrl) {
-                    <img [src]="photoUrl" [alt]="memberName(m)" />
-                  } @else {
-                    {{ initial(memberName(m)) }}
+
+              @if (showBoardMenu()) {
+                <div class="board-switcher-menu">
+                  @for (b of boards(); track b.id) {
+                    <button
+                      type="button"
+                      class="board-switcher-option"
+                      [class.active]="b.id === boardId()"
+                      (click)="selectBoard(b)"
+                    >
+                      {{ b.name }}
+                    </button>
                   }
-                </button>
+                  @if (isLeader()) {
+                    <button type="button" class="board-switcher-option create" (click)="openBoardModal()">
+                      + Yeni pano
+                    </button>
+                  }
+                </div>
               }
             </div>
+          </div>
+          @if (team()) {
+            <div class="assignee-filter">
+              <button
+                type="button"
+                class="assignee-filter-trigger"
+                [class.active]="assigneeFilter() !== 'all'"
+                [attr.aria-expanded]="showAssigneeFilterMenu()"
+                title="Atanan kişiye göre filtrele"
+                (click)="$event.stopPropagation(); toggleAssigneeFilterMenu()"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 5h18" />
+                  <path d="M7 12h10" />
+                  <path d="M10 19h4" />
+                </svg>
+              </button>
 
-            @if (showAssigneeFilterMenu()) {
-              <div class="assignee-filter-menu" (click)="$event.stopPropagation()">
+              <div class="member-chips" role="group" aria-label="Hızlı atanan kişi filtresi">
                 <button
                   type="button"
-                  class="assignee-filter-option"
-                  [class.active]="assigneeFilter() === 'all'"
-                  (click)="selectAssigneeFilter('all')"
+                  class="chip-avatar unassigned"
+                  [class.selected]="isUnassignedFilterActive()"
+                  [title]="
+                    isUnassignedFilterActive()
+                      ? 'Atanmamış görev filtresini kaldır'
+                      : 'Atanmamış görevleri filtrele'
+                  "
+                  [attr.aria-pressed]="isUnassignedFilterActive()"
+                  (click)="toggleUnassignedFilter()"
                 >
-                  Tüm görevler
-                </button>
-                <button
-                  type="button"
-                  class="assignee-filter-option"
-                  [class.active]="isUnassignedFilterActive()"
-                  (click)="selectAssigneeFilter('unassigned')"
-                >
-                  <span class="menu-avatar unassigned">—</span>
-                  <span class="menu-label">Atanmamış görevler</span>
+                  —
                 </button>
                 @for (m of team()!.members; track m.userId) {
                   <button
                     type="button"
-                    class="assignee-filter-option"
-                    [class.active]="isAssigneeFilterActive(m.userId)"
-                    (click)="selectAssigneeFilter(m.userId)"
+                    class="chip-avatar"
+                    [class.leader]="m.isLeader"
+                    [class.selected]="isAssigneeFilterActive(m.userId)"
+                    [class.has-photo]="!!memberPhotoUrl(m.userId)"
+                    [title]="
+                      isAssigneeFilterActive(m.userId)
+                        ? memberName(m) + ' filtresini kaldır'
+                        : memberName(m) + ' kişisine atanan görevleri filtrele'
+                    "
+                    [attr.aria-pressed]="isAssigneeFilterActive(m.userId)"
+                    (click)="toggleAssigneeFilter(m.userId)"
                   >
-                    <span class="menu-avatar" [class.has-photo]="!!memberPhotoUrl(m.userId)">
-                      @if (memberPhotoUrl(m.userId); as photoUrl) {
-                        <img [src]="photoUrl" [alt]="memberName(m)" />
-                      } @else {
-                        {{ initial(memberName(m)) }}
-                      }
-                    </span>
-                    <span class="menu-label">{{ memberName(m) }}</span>
-                    @if (m.isLeader) {
-                      <span class="menu-badge">Lider</span>
+                    @if (memberPhotoUrl(m.userId); as photoUrl) {
+                      <img [src]="photoUrl" [alt]="memberName(m)" />
+                    } @else {
+                      {{ initial(memberName(m)) }}
                     }
                   </button>
                 }
               </div>
-            }
+
+              @if (showAssigneeFilterMenu()) {
+                <div class="assignee-filter-menu" (click)="$event.stopPropagation()">
+                  <button
+                    type="button"
+                    class="assignee-filter-option"
+                    [class.active]="assigneeFilter() === 'all'"
+                    (click)="selectAssigneeFilter('all')"
+                  >
+                    Tüm görevler
+                  </button>
+                  <button
+                    type="button"
+                    class="assignee-filter-option"
+                    [class.active]="isUnassignedFilterActive()"
+                    (click)="selectAssigneeFilter('unassigned')"
+                  >
+                    <span class="menu-avatar unassigned">—</span>
+                    <span class="menu-label">Atanmamış görevler</span>
+                  </button>
+                  @for (m of team()!.members; track m.userId) {
+                    <button
+                      type="button"
+                      class="assignee-filter-option"
+                      [class.active]="isAssigneeFilterActive(m.userId)"
+                      (click)="selectAssigneeFilter(m.userId)"
+                    >
+                      <span class="menu-avatar" [class.has-photo]="!!memberPhotoUrl(m.userId)">
+                        @if (memberPhotoUrl(m.userId); as photoUrl) {
+                          <img [src]="photoUrl" [alt]="memberName(m)" />
+                        } @else {
+                          {{ initial(memberName(m)) }}
+                        }
+                      </span>
+                      <span class="menu-label">{{ memberName(m) }}</span>
+                      @if (m.isLeader) {
+                        <span class="menu-badge">Lider</span>
+                      }
+                    </button>
+                  }
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        @if (isLeader()) {
+          <div class="board-toolbar-actions">
+            <button
+              type="button"
+              class="secondary-btn"
+              (click)="deleteCurrentBoard()"
+              [disabled]="deletingBoard() || boards().length <= 1"
+              title="Bu panoyu sil"
+            >
+              {{ deletingBoard() ? 'Siliniyor...' : 'Panoyu sil' }}
+            </button>
           </div>
         }
-      </div>
-
-      <div class="board-actions">
-        @if (teamId()) {
-          <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'announcements']">Duyurular</a>
-          <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'reports']">Reports</a>
-        }
-        <button type="button" class="secondary-btn" (click)="openMembersModal()">Üyeler</button>
-        @if (isLeader()) {
-          <button
-            type="button"
-            class="secondary-btn"
-            (click)="deleteCurrentBoard()"
-            [disabled]="deletingBoard() || boards().length <= 1"
-            title="Bu panoyu sil"
-          >
-            {{ deletingBoard() ? 'Siliniyor...' : 'Panoyu sil' }}
-          </button>
-          <button type="button" class="danger-btn" (click)="deleteTeam()" [disabled]="deletingTeam()">
-            {{ deletingTeam() ? 'Siliniyor...' : 'Takımı sil' }}
-          </button>
-        }
-      </div>
-    </header>
+      </header>
 
     @if (isUnassignedFilterActive()) {
       <div class="assignee-filter-bar">
@@ -242,6 +246,7 @@
       </div>
     }
   </main>
+  </app-team-workspace-shell>
 </app-layout>
 
 @if (showColumnModal()) {

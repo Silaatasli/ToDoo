@@ -1,0 +1,45 @@
+.kapsam-page {
+  padding: 1.25rem 1.5rem 2rem;
+}
+
+.state-box {
+  padding: 1.25rem;
+  border-radius: 0.75rem;
+  background: var(--surface-elevated, color-mix(in srgb, var(--text) 4%, var(--surface)));
+  color: var(--muted);
+  border: 1px solid var(--border-soft);
+
+  &.error {
+    color: var(--danger, #c0392b);
+    border-color: color-mix(in srgb, var(--danger, #c0392b) 35%, transparent);
+  }
+}
+
+.kapsam-placeholder {
+  max-width: 40rem;
+  padding: 1.5rem 0;
+
+  h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.15rem;
+    font-weight: 650;
+    color: var(--text);
+  }
+
+  p {
+    margin: 0 0 0.65rem;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .hint {
+    font-size: 0.9rem;
+    color: var(--primary);
+  }
+}
+
+@media (max-width: 720px) {
+  .kapsam-page {
+    padding: 1rem;
+  }
+}

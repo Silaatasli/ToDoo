@@ -1,0 +1,24 @@
+<app-layout>
+  <app-team-workspace-shell
+    [teamId]="teamId()"
+    [teamName]="team()?.name ?? 'Takım'"
+    activeTab="kapsam"
+  >
+    <main class="kapsam-page">
+      @if (loading()) {
+        <div class="state-box">Kapsam yükleniyor...</div>
+      } @else if (error()) {
+        <div class="state-box error">{{ error() }}</div>
+      } @else {
+        <section class="kapsam-placeholder">
+          <h2>Kapsam</h2>
+          <p>
+            Backlog ve planlanmış sprintler burada listelenecek. Görevleri sprint’e taşıyıp
+            sıralayabileceksin.
+          </p>
+          <p class="hint">Sprint modülü henüz aktif değil — yakında eklenecek.</p>
+        </section>
+      }
+    </main>
+  </app-team-workspace-shell>
+</app-layout>

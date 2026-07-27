@@ -1,14 +1,17 @@
 <app-layout>
-  <main class="announcements-page">
-    <header class="page-header">
-      <div class="page-header-text">
-        <h1>{{ team()?.name ?? 'Takım duyuruları' }}</h1>
-        <p class="page-subtitle">Taslak kaydedin, hemen yayınlayın veya ileri bir tarihe planlayın.</p>
-      </div>
-      @if (teamId()) {
-        <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">← Panoya dön</a>
-      }
-    </header>
+  <app-team-workspace-shell
+    [teamId]="teamId()"
+    [teamName]="team()?.name ?? 'Takım'"
+    activeTab="duyurular"
+    [showMembersButton]="false"
+  >
+    <main class="announcements-page">
+      <header class="page-header">
+        <div class="page-header-text">
+          <h2>Duyurular</h2>
+          <p class="page-subtitle">Taslak kaydedin, hemen yayınlayın veya ileri bir tarihe planlayın.</p>
+        </div>
+      </header>
 
     @if (loading()) {
       <div class="state-box">Duyurular yükleniyor...</div>
@@ -167,6 +170,7 @@
       </div>
     }
   </main>
+  </app-team-workspace-shell>
 </app-layout>
 
 @if (openAnnouncement(); as detail) {

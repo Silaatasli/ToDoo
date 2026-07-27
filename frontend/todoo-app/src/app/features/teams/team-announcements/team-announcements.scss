@@ -1,7 +1,7 @@
 .announcements-page {
   min-height: 100%;
-  background: var(--surface);
-  padding: 1.5rem 1.75rem 2.5rem;
+  background: transparent;
+  padding: 1.1rem 1.5rem 2.5rem;
 }
 
 .page-header {
@@ -9,18 +9,18 @@
   justify-content: space-between;
   align-items: flex-start;
   gap: 1rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
 }
 
 .page-header-text {
   min-width: 0;
 }
 
-.page-header h1 {
+.page-header h2 {
   margin: 0;
-  font-size: 1.55rem;
-  font-weight: 700;
-  letter-spacing: -0.025em;
+  font-size: 1.15rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   line-height: 1.2;
   color: var(--text);
 }

@@ -1,14 +1,17 @@
 <app-layout>
-  <main class="reports-page">
-    <header class="page-toolbar">
-      <div>
-        <h1>{{ team()?.name ?? 'Takım raporları' }}</h1>
-        <p>Bu takımın görev durumu, SLA performansı ve kategori kullanımı özeti.</p>
-      </div>
-      @if (teamId()) {
-        <a class="secondary-btn" [routerLink]="['/teams', teamId(), 'board']">Panoya dön</a>
-      }
-    </header>
+  <app-team-workspace-shell
+    [teamId]="teamId()"
+    [teamName]="team()?.name ?? 'Takım'"
+    activeTab="raporlar"
+    [showMembersButton]="false"
+  >
+    <main class="reports-page">
+      <header class="page-toolbar">
+        <div>
+          <h2>Raporlar</h2>
+          <p>Bu takımın görev durumu, SLA performansı ve kategori kullanımı özeti.</p>
+        </div>
+      </header>
 
     @if (loading()) {
       <div class="state-box">Rapor yükleniyor...</div>
@@ -244,6 +247,7 @@
       </section>
     }
   </main>
+  </app-team-workspace-shell>
 </app-layout>
 
 @if (showTasksModal()) {

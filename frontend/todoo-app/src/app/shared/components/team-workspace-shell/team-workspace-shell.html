@@ -1,0 +1,93 @@
+<div class="team-workspace">
+  <header class="team-workspace-header">
+    <div class="team-workspace-identity">
+      <span class="team-avatar" aria-hidden="true">{{ teamInitial() }}</span>
+      <h1 class="team-workspace-title">{{ teamName() }}</h1>
+      @if (showMembersButton()) {
+        <button
+          type="button"
+          class="team-icon-btn"
+          title="Üyeler"
+          aria-label="Üyeler"
+          (click)="openMembers.emit()"
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        </button>
+      }
+    </div>
+
+    <div class="team-workspace-actions">
+      <ng-content select="[workspaceActions]" />
+    </div>
+  </header>
+
+  @if (teamId(); as id) {
+    <nav class="team-tabs" aria-label="Takım görünümleri">
+      <a
+        class="team-tab"
+        [routerLink]="['/teams', id, 'board']"
+        [class.active]="activeTab() === 'pano'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="18" rx="1" />
+          <rect x="14" y="3" width="7" height="10" rx="1" />
+        </svg>
+        <span>Pano</span>
+      </a>
+
+      <a
+        class="team-tab"
+        [routerLink]="['/teams', id, 'kapsam']"
+        routerLinkActive="active"
+        [class.active]="activeTab() === 'kapsam'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M8 6h13" />
+          <path d="M8 12h13" />
+          <path d="M8 18h13" />
+          <path d="M3 6h.01" />
+          <path d="M3 12h.01" />
+          <path d="M3 18h.01" />
+        </svg>
+        <span>Kapsam</span>
+      </a>
+
+      <a
+        class="team-tab"
+        [routerLink]="['/teams', id, 'announcements']"
+        routerLinkActive="active"
+        [class.active]="activeTab() === 'duyurular'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 11v2a9 9 0 0 0 9 9h1" />
+          <path d="M14 4v16l7-3V7z" />
+          <path d="M11 4H5a2 2 0 0 0-2 2v1" />
+        </svg>
+        <span>Duyurular</span>
+      </a>
+
+      <a
+        class="team-tab"
+        [routerLink]="['/teams', id, 'reports']"
+        routerLinkActive="active"
+        [class.active]="activeTab() === 'raporlar'"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M18 20V10" />
+          <path d="M12 20V4" />
+          <path d="M6 20v-6" />
+        </svg>
+        <span>Raporlar</span>
+      </a>
+    </nav>
+  }
+
+  <div class="team-workspace-body">
+    <ng-content />
+  </div>
+</div>

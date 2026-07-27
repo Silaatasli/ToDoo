@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { NotificationService } from '../../../core/services/notification.service';
 import { TeamBoardHubService } from '../../../core/services/team-board-hub.service';
@@ -15,12 +15,13 @@ import {
   TeamMember
 } from '../../../models/team.model';
 import { AppLayout } from '../../../shared/components/app-layout/app-layout';
+import { TeamWorkspaceShell } from '../../../shared/components/team-workspace-shell/team-workspace-shell';
 import { memberName } from '../team-board/board-ui.utils';
 import { AnnouncementDetailModalComponent } from './components/announcement-detail-modal/announcement-detail-modal';
 
 @Component({
   selector: 'app-team-announcements',
-  imports: [AppLayout, RouterLink, ReactiveFormsModule, AnnouncementDetailModalComponent],
+  imports: [AppLayout, TeamWorkspaceShell, ReactiveFormsModule, AnnouncementDetailModalComponent],
   templateUrl: './team-announcements.html',
   styleUrl: './team-announcements.scss'
 })

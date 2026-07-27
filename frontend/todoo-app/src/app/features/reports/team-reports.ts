@@ -2,17 +2,18 @@ import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, computed, DestroyRef, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { ReportService } from '../../core/services/report.service';
 import { AuthService } from '../../core/services/auth.service';
 import { TeamService } from '../../core/services/team.service';
 import { ReportTaskItem, SlaPerformance, SlaTaskItem, TaskReport, TeamSlaMembers } from '../../models/report.model';
 import { TeamDetail } from '../../models/team.model';
 import { AppLayout } from '../../shared/components/app-layout/app-layout';
+import { TeamWorkspaceShell } from '../../shared/components/team-workspace-shell/team-workspace-shell';
 
 @Component({
   selector: 'app-team-reports',
-  imports: [AppLayout, RouterLink, DatePipe],
+  imports: [AppLayout, TeamWorkspaceShell, DatePipe],
   templateUrl: './team-reports.html',
   styleUrl: './team-reports.scss'
 })

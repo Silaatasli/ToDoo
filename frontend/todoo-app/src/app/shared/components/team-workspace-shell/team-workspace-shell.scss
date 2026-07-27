@@ -1,0 +1,141 @@
+.team-workspace {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+}
+
+.team-workspace-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.5rem 0.65rem;
+}
+
+.team-workspace-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.team-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--primary) 18%, var(--surface-elevated, var(--surface)));
+  color: var(--primary);
+  font-size: 0.85rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.team-workspace-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.team-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.4rem;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+
+  svg {
+    width: 1.1rem;
+    height: 1.1rem;
+  }
+
+  &:hover {
+    background: var(--surface-elevated, color-mix(in srgb, var(--text) 6%, transparent));
+    color: var(--text);
+  }
+}
+
+.team-workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.team-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 0.15rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--border-soft);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.team-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.85rem;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.88rem;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease;
+
+  svg {
+    width: 0.95rem;
+    height: 0.95rem;
+    flex-shrink: 0;
+  }
+
+  &:hover {
+    color: var(--text);
+  }
+
+  &.active {
+    color: var(--primary);
+    border-bottom-color: var(--primary);
+    font-weight: 600;
+  }
+}
+
+.team-workspace-body {
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 720px) {
+  .team-workspace-header,
+  .team-tabs {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .team-workspace-title {
+    font-size: 1.1rem;
+  }
+
+  .team-tab {
+    padding: 0.65rem 0.7rem;
+    font-size: 0.82rem;
+  }
+}

@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, HostListener, computed, inject, OnInit, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, Validators } from '@angular/forms';
-import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { CategoryService } from '../../../core/services/category.service';
 import { ProfilePhotoCacheService } from '../../../core/services/profile-photo-cache.service';
@@ -11,6 +11,7 @@ import { TeamBoardHubService } from '../../../core/services/team-board-hub.servi
 import { TaskService } from '../../../core/services/task.service';
 import { TeamService } from '../../../core/services/team.service';
 import { AppLayout } from '../../../shared/components/app-layout/app-layout';
+import { TeamWorkspaceShell } from '../../../shared/components/team-workspace-shell/team-workspace-shell';
 import { Category } from '../../../models/category.model';
 import {
   AssignmentStatus,
@@ -33,7 +34,7 @@ import { TaskDetailModalComponent } from './components/task-detail-modal/task-de
   selector: 'app-team-board',
   imports: [
     AppLayout,
-    RouterLink,
+    TeamWorkspaceShell,
     BoardColumnComponent,
     CreateColumnModalComponent,
     CreateBoardModalComponent,

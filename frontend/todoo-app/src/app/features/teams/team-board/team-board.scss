@@ -1,18 +1,25 @@
 ﻿.board-page {
   min-height: 100%;
-  background: var(--surface);
-  padding: 1.25rem 1.5rem 2rem;
+  background: transparent;
+  padding: 0.85rem 1.5rem 2rem;
 }
 
 .board-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  margin-bottom: 1.25rem;
-  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
   border-bottom: 1px solid var(--border-soft);
+}
+
+.board-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 
 .board-title {
@@ -21,9 +28,9 @@
   gap: 1rem;
   flex-wrap: wrap;
 
-  h1 {
+  h2 {
     margin: 0;
-    font-size: 1.35rem;
+    font-size: 1.05rem;
     font-weight: 600;
     color: var(--text);
     letter-spacing: -0.01em;
@@ -35,14 +42,6 @@
   flex-direction: column;
   gap: 0.2rem;
   min-width: 0;
-}
-
-.team-name-label {
-  margin: 0;
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--muted);
-  letter-spacing: 0.01em;
 }
 
 .board-switcher {
@@ -59,7 +58,7 @@
   cursor: pointer;
   color: inherit;
 
-  h1 {
+  h2 {
     text-align: left;
   }
 
@@ -70,7 +69,7 @@
     flex-shrink: 0;
   }
 
-  &:hover h1 {
+  &:hover h2 {
     color: var(--primary, var(--chip-text));
   }
 }
@@ -412,6 +411,9 @@
   color: var(--text-secondary);
   font-size: 0.875rem;
   font-weight: 500;
+  line-height: 1.25;
+  min-height: 2.25rem;
+  box-sizing: border-box;
   cursor: pointer;
   white-space: nowrap;
   text-decoration: none;
@@ -427,6 +429,9 @@
 }
 
 .danger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 0.55rem 0.9rem;
   border: 1px solid var(--error-border);
   border-radius: 4px;
@@ -434,6 +439,9 @@
   color: var(--error);
   font-size: 0.875rem;
   font-weight: 500;
+  line-height: 1.25;
+  min-height: 2.25rem;
+  box-sizing: border-box;
   cursor: pointer;
   white-space: nowrap;
 
