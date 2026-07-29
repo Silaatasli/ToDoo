@@ -20,6 +20,7 @@ import { TeamService } from '../../../core/services/team.service';
 import { Category } from '../../../models/category.model';
 import {
   BoardKapsam,
+  SprintAuditEntry,
   SprintDetail,
   SprintStatus,
   SprintTask
@@ -95,6 +96,11 @@ export class TeamKapsamPage implements OnInit {
 
   readonly openTaskId = signal<number | null>(null);
   private taskDragMoved = false;
+
+  readonly activityOpenSprintIds = signal<Set<number>>(new Set());
+  readonly activityBySprint = signal<Record<number, SprintAuditEntry[]>>({});
+  readonly activityLoadingSprintId = signal<number | null>(null);
+  readonly activityErrorBySprint = signal<Record<number, string>>({});
 
   readonly sprintStatus = SprintStatus;
 
@@ -231,6 +237,63 @@ export class TeamKapsamPage implements OnInit {
       default:
         return 'Planlandı';
     }
+  }
+
+  auditActionLabel(actionType: string): string {
+    switch (actionType) {
+      case 'SprintCreated':
+        return 'Sprint oluşturuldu';
+      case 'SprintUpdated':
+        return 'Sprint güncellendi';
+      case 'SprintDeleted':
+        return 'Sprint silindi';
+      case 'SprintStarted':
+        return 'Sprint başlatıldı';
+      case 'SprintCompleted':
+        return 'Sprint tamamlandı';
+      case 'SprintCancelled':
+        return 'Sprint iptal edildi';
+      case 'TaskAddedAfterSprintStart':
+        return 'Aktif sprinte görev eklendi';
+      case 'TaskRemovedAfterSprintStart':
+        return 'Aktif sprintten görev çıkarıldı';
+      case 'SprintScopeChanged':
+        return 'Sprint kapsamı değişti';
+      default:
+        return actionType;
+    }
+  }
+
+  isActivityOpen(sprintId: number): boolean {
+    return this.activityOpenSprintIds().has(sprintId);
+  }
+
+  toggleActivity(sprint: SprintDetail, event?: Event): void {
+    event?.stopPropagation();
+    const id = sprint.id;
+    const open = new Set(this.activityOpenSprintIds());
+    if (open.has(id)) {
+      open.delete(id);
+      this.activityOpenSprintIds.set(open);
+      return;
+    }
+
+    open.add(id);
+    this.activityOpenSprintIds.set(open);
+    this.loadActivity(id);
+  }
+
+  refreshActivity(sprintId: number, event?: Event): void {
+    event?.stopPropagation();
+    this.loadActivity(sprintId);
+  }
+
+  activityFor(sprintId: number): SprintAuditEntry[] {
+    return this.activityBySprint()[sprintId] ?? [];
+  }
+
+  activityError(sprintId: number): string | null {
+    return this.activityErrorBySprint()[sprintId] ?? null;
   }
 
   openCreateModal(): void {
@@ -660,6 +723,29 @@ export class TeamKapsamPage implements OnInit {
     this.sprintService.reorderSprintTasks(Number(target.replace('sprint-', '')), taskIds).subscribe({
       next: () => this.busy.set(false),
       error: onError
+    });
+  }
+
+  private loadActivity(sprintId: number): void {
+    this.activityLoadingSprintId.set(sprintId);
+    this.activityErrorBySprint.update((map) => {
+      const next = { ...map };
+      delete next[sprintId];
+      return next;
+    });
+
+    this.sprintService.getSprintActivity(sprintId).subscribe({
+      next: (entries) => {
+        this.activityBySprint.update((map) => ({ ...map, [sprintId]: entries }));
+        this.activityLoadingSprintId.set(null);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.activityLoadingSprintId.set(null);
+        this.activityErrorBySprint.update((map) => ({
+          ...map,
+          [sprintId]: err.error?.message ?? 'Aktivite yüklenemedi.'
+        }));
+      }
     });
   }
 

@@ -65,6 +65,14 @@
                         Düzenle
                       </button>
                     }
+                    <button
+                      type="button"
+                      class="secondary-btn"
+                      (click)="toggleActivity(sprint, $event)"
+                      [disabled]="busy()"
+                    >
+                      {{ isActivityOpen(sprint.id) ? 'Aktiviteyi gizle' : 'Aktivite' }}
+                    </button>
                     @if (isPlanned(sprint)) {
                       <button
                         type="button"
@@ -104,6 +112,57 @@
                     }
                   </div>
                 </div>
+
+                @if (isActivityOpen(sprint.id)) {
+                  <div class="sprint-activity">
+                    <div class="sprint-activity-head">
+                      <h3>Sprint aktivitesi</h3>
+                      <button
+                        type="button"
+                        class="link-btn"
+                        (click)="refreshActivity(sprint.id, $event)"
+                        [disabled]="activityLoadingSprintId() === sprint.id"
+                      >
+                        Yenile
+                      </button>
+                    </div>
+                    @if (activityLoadingSprintId() === sprint.id) {
+                      <p class="hint">Yükleniyor...</p>
+                    } @else if (activityError(sprint.id); as actErr) {
+                      <p class="inline-error">{{ actErr }}</p>
+                    } @else if (activityFor(sprint.id).length === 0) {
+                      <p class="hint">Henüz kayıt yok.</p>
+                    } @else {
+                      <ul class="activity-list">
+                        @for (entry of activityFor(sprint.id); track entry.id) {
+                          <li>
+                            <div class="activity-main">
+                              <strong>{{ auditActionLabel(entry.actionType) }}</strong>
+                              <span class="meta">
+                                {{ entry.userEmail || ('Kullanıcı #' + entry.userId) }}
+                                · {{ entry.createdDate | date: 'dd MMM yyyy HH:mm' }}
+                              </span>
+                              @if (entry.oldValue || entry.newValue) {
+                                <span class="meta change">
+                                  @if (entry.oldValue) {
+                                    <span>{{ entry.oldValue }}</span>
+                                  }
+                                  @if (entry.oldValue && entry.newValue) {
+                                    <span> → </span>
+                                  }
+                                  @if (entry.newValue) {
+                                    <span>{{ entry.newValue }}</span>
+                                  }
+                                </span>
+                              }
+                            </div>
+                            <span class="source-pill" [attr.data-source]="entry.source">{{ entry.source }}</span>
+                          </li>
+                        }
+                      </ul>
+                    }
+                  </div>
+                }
 
                 <div
                   class="accordion-body drop-zone"

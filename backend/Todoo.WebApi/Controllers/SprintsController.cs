@@ -181,4 +181,16 @@ public class SprintsController : ControllerBase
             userId);
         return result.ToActionResult();
     }
+
+    [HttpGet("sprints/{sprintId:int}/activity")]
+    public async Task<IActionResult> GetActivity(int sprintId, [FromQuery] int take = 100)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _sprintService.GetActivityAsync(sprintId, userId, take);
+        return result.ToActionResult();
+    }
 }

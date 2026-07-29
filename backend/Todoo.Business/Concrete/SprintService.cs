@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Todoo.Business.Abstract;
 using Todoo.Business.Models;
 using Todoo.Business.Models.Sprints;
@@ -14,10 +15,17 @@ public class SprintService : ISprintService
     private static readonly TimeSpan MaxSprintDuration = TimeSpan.FromDays(28);
 
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISprintAuditSearchService _auditSearch;
+    private readonly ILogger<SprintService> _logger;
 
-    public SprintService(IUnitOfWork unitOfWork)
+    public SprintService(
+        IUnitOfWork unitOfWork,
+        ISprintAuditSearchService auditSearch,
+        ILogger<SprintService> logger)
     {
         _unitOfWork = unitOfWork;
+        _auditSearch = auditSearch;
+        _logger = logger;
     }
 
     public async Task<ServiceResult<BoardKapsamDto>> GetKapsamAsync(int teamId, int boardId, int userId)
@@ -646,6 +654,54 @@ public class SprintService : ISprintService
         return await GetByIdAsync(sprint.Id, userId);
     }
 
+    public async Task<ServiceResult<IReadOnlyList<SprintAuditEntryDto>>> GetActivityAsync(
+        int sprintId,
+        int userId,
+        int take = 100)
+    {
+        var sprintResult = await GetSprintIfMemberAsync(sprintId, userId);
+        if (!sprintResult.Success)
+        {
+            return ServiceResult<IReadOnlyList<SprintAuditEntryDto>>.Fail(
+                sprintResult.ErrorMessage!,
+                sprintResult.ErrorKind ?? ServiceErrorKind.Validation);
+        }
+
+        var fromSearch = await _auditSearch.SearchBySprintAsync(sprintId, take);
+        if (fromSearch.Count > 0)
+        {
+            return ServiceResult<IReadOnlyList<SprintAuditEntryDto>>.Ok(fromSearch);
+        }
+
+        // OpenSearch bos/erisilemezse SQL yedegi
+        var sprint = sprintResult.Data!;
+        var users = (await _unitOfWork.Users.GetAllAsync())
+            .ToDictionary(user => user.Id, user => user.Email);
+        var logs = (await _unitOfWork.SprintActivityLogs.GetAllAsync())
+            .Where(log => log.SprintId == sprintId)
+            .OrderByDescending(log => log.CreatedDate)
+            .Take(Math.Clamp(take, 1, 500))
+            .Select(log => new SprintAuditEntryDto
+            {
+                Id = log.Id.ToString(),
+                TeamId = log.TeamId,
+                BoardId = sprint.BoardId,
+                SprintId = log.SprintId,
+                SprintName = sprint.Name,
+                TaskId = log.TaskId,
+                UserId = log.UserId,
+                UserEmail = users.GetValueOrDefault(log.UserId),
+                ActionType = log.ActionType.ToString(),
+                OldValue = log.OldValue,
+                NewValue = log.NewValue,
+                CreatedDate = log.CreatedDate,
+                Source = "sql"
+            })
+            .ToList();
+
+        return ServiceResult<IReadOnlyList<SprintAuditEntryDto>>.Ok(logs);
+    }
+
     private async Task<ServiceResult<(Team Team, Board Board)>> EnsureBoardMemberAsync(
         int teamId,
         int boardId,
@@ -877,6 +933,7 @@ public class SprintService : ISprintService
         string? newValue,
         int? taskId)
     {
+        var createdAt = DateTime.UtcNow;
         _unitOfWork.SprintActivityLogs.Add(new SprintActivityLog
         {
             TeamId = sprint.TeamId,
@@ -886,9 +943,32 @@ public class SprintService : ISprintService
             ActionType = action,
             OldValue = oldValue,
             NewValue = newValue,
-            CreatedDate = DateTime.UtcNow
+            CreatedDate = createdAt
         });
         await _unitOfWork.SaveChangesAsync();
+
+        var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        try
+        {
+            await _auditSearch.IndexAsync(new SprintAuditWriteRequest
+            {
+                TeamId = sprint.TeamId,
+                BoardId = sprint.BoardId,
+                SprintId = sprint.Id,
+                SprintName = sprint.Name,
+                TaskId = taskId,
+                UserId = userId,
+                UserEmail = user?.Email,
+                ActionType = action.ToString(),
+                OldValue = oldValue,
+                NewValue = newValue,
+                CreatedDate = createdAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "OpenSearch dual-write basarisiz; SQL audit kaydi mevcut.");
+        }
     }
 
     private static SprintDetailDto MapSprintDetail(Sprint sprint, List<SprintTaskDto> tasks)

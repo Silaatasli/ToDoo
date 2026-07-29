@@ -7,6 +7,7 @@ import {
   CancelSprintRequest,
   CompleteSprintRequest,
   CreateSprintRequest,
+  SprintAuditEntry,
   SprintDetail,
   SprintTask,
   UpdateSprintRequest
@@ -19,6 +20,12 @@ export class SprintService {
 
   getKapsam(teamId: number, boardId: number): Observable<BoardKapsam> {
     return this.http.get<BoardKapsam>(`${this.api}/teams/${teamId}/boards/${boardId}/kapsam`);
+  }
+
+  getSprintActivity(sprintId: number, take = 100): Observable<SprintAuditEntry[]> {
+    return this.http.get<SprintAuditEntry[]>(`${this.api}/sprints/${sprintId}/activity`, {
+      params: { take: String(take) }
+    });
   }
 
   createSprint(teamId: number, boardId: number, request: CreateSprintRequest): Observable<SprintDetail> {

@@ -1,0 +1,24 @@
+services:
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    container_name: todoo-opensearch
+    environment:
+      - discovery.type=single-node
+      - plugins.security.disabled=true
+      - DISABLE_INSTALL_DEMO_CONFIG=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - bootstrap.memory_lock=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    ports:
+      - "9200:9200"
+    volumes:
+      - todoo-opensearch-data:/usr/share/opensearch/data
+
+volumes:
+  todoo-opensearch-data:

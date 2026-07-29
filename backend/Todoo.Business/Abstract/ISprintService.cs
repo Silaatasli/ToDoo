@@ -17,4 +17,5 @@ public interface ISprintService
     Task<ServiceResult<SprintDetailDto>> StartAsync(int sprintId, int userId);
     Task<ServiceResult<SprintDetailDto>> CompleteAsync(int sprintId, CompleteSprintRequest request, int userId);
     Task<ServiceResult<SprintDetailDto>> CancelAsync(int sprintId, CancelSprintRequest request, int userId);
+    Task<ServiceResult<IReadOnlyList<SprintAuditEntryDto>>> GetActivityAsync(int sprintId, int userId, int take = 100);
 }

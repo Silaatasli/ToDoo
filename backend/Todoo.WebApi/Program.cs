@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.JsonWebTokens;
 using Microsoft.IdentityModel.Tokens;
+using OpenSearch.Client;
 using StackExchange.Redis;
 using Todoo.Business.Abstract;
 using Todoo.Business.Concrete;
@@ -36,6 +37,7 @@ builder.Services.Configure<SendGridOptions>(builder.Configuration.GetSection(Sen
 builder.Services.Configure<PasswordResetOptions>(builder.Configuration.GetSection(PasswordResetOptions.SectionName));
 builder.Services.Configure<RabbitMqOptions>(builder.Configuration.GetSection(RabbitMqOptions.SectionName));
 builder.Services.Configure<NotificationOptions>(builder.Configuration.GetSection(NotificationOptions.SectionName));
+builder.Services.Configure<OpenSearchOptions>(builder.Configuration.GetSection(OpenSearchOptions.SectionName));
 
 var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
     ?? throw new InvalidOperationException("Jwt ayarlari bulunamadi.");
@@ -226,6 +228,16 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ISlaPerformanceService, SlaPerformanceService>();
 builder.Services.AddScoped<ISprintService, SprintService>();
+builder.Services.AddSingleton<IOpenSearchClient>(sp =>
+{
+    var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<OpenSearchOptions>>().Value;
+    var settings = new OpenSearch.Client.ConnectionSettings(new Uri(options.Uri))
+        .DefaultIndex(options.SprintAuditIndex)
+        .PrettyJson()
+        .ThrowExceptions(false);
+    return new OpenSearchClient(settings);
+});
+builder.Services.AddSingleton<ISprintAuditSearchService, SprintAuditSearchService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();

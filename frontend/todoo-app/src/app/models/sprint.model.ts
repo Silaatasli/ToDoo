@@ -62,6 +62,22 @@ export interface UpdateSprintRequest {
   plannedEndDate: string;
 }
 
+export interface SprintAuditEntry {
+  id: string;
+  teamId: number;
+  boardId: number;
+  sprintId: number;
+  sprintName: string;
+  taskId?: number | null;
+  userId: number;
+  userEmail?: string | null;
+  actionType: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  createdDate: string;
+  source: string;
+}
+
 export interface CompleteSprintRequest {
   incompleteDestination: 'backlog' | 'sprint';
   targetSprintId?: number | null;
