@@ -73,7 +73,10 @@ export class TeamKapsamPage implements OnInit {
   readonly kapsam = signal<BoardKapsam | null>(null);
   /** CDK mutable listeler — signal degil, ayni referans korunmali. */
   backlogList: SprintTask[] = [];
+  sprintList: SprintDetail[] = [];
   sprintLists: Record<number, SprintTask[]> = {};
+  private sprintDragFromIndex: number | null = null;
+  readonly sprintDropTargetId = signal<number | null>(null);
   readonly loading = signal(true);
   readonly error = signal<string | null>(null);
   readonly actionError = signal<string | null>(null);
@@ -127,10 +130,6 @@ export class TeamKapsamPage implements OnInit {
   readonly activeSprint = computed(
     () =>
       (this.kapsam()?.sprints ?? []).find((s) => Number(s.status) === SprintStatus.Active) ?? null
-  );
-
-  readonly visibleSprints = computed(() =>
-    (this.kapsam()?.sprints ?? []).filter((s) => Number(s.status) !== SprintStatus.Cancelled)
   );
 
   readonly completeIncompleteCount = computed(() => {
@@ -649,6 +648,55 @@ export class TeamKapsamPage implements OnInit {
     }, 0);
   }
 
+  onSprintDragStart(event: DragEvent, fromIndex: number): void {
+    if (this.busy()) {
+      event.preventDefault();
+      return;
+    }
+    this.sprintDragFromIndex = fromIndex;
+    event.dataTransfer?.setData('text/plain', String(fromIndex));
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+    }
+  }
+
+  onSprintDragOver(event: DragEvent, sprint: SprintDetail): void {
+    if (this.sprintDragFromIndex == null) {
+      return;
+    }
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    this.sprintDropTargetId.set(sprint.id);
+  }
+
+  onSprintDragLeave(event: DragEvent, sprint: SprintDetail): void {
+    if (this.sprintDropTargetId() === sprint.id) {
+      this.sprintDropTargetId.set(null);
+    }
+  }
+
+  onSprintDrop(event: DragEvent, toIndex: number): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const fromIndex = this.sprintDragFromIndex;
+    this.sprintDragFromIndex = null;
+    this.sprintDropTargetId.set(null);
+
+    if (fromIndex == null || fromIndex === toIndex) {
+      return;
+    }
+
+    moveItemInArray(this.sprintList, fromIndex, toIndex);
+    this.persistSprintOrder();
+  }
+
+  onSprintDragEnd(): void {
+    this.sprintDragFromIndex = null;
+    this.sprintDropTargetId.set(null);
+  }
+
   openTaskDetail(task: SprintTask, event?: Event): void {
     event?.stopPropagation();
     if (this.taskDragMoved || this.busy()) {
@@ -718,6 +766,36 @@ export class TeamKapsamPage implements OnInit {
           this.busy.set(false);
           this.actionError.set(err.error?.message ?? 'Görev taşınamadı.');
           this.loadKapsam(true);
+        }
+      });
+  }
+
+  private persistSprintOrder(): void {
+    const teamId = this.teamId();
+    const boardId = this.boardId();
+    if (!teamId || !boardId) {
+      return;
+    }
+
+    this.busy.set(true);
+    this.actionError.set(null);
+    this.sprintService
+      .reorderSprints(
+        teamId,
+        boardId,
+        this.sprintList.map((sprint) => sprint.id)
+      )
+      .subscribe({
+        next: () => {
+          this.busy.set(false);
+          this.sprintList.forEach((sprint, index) => {
+            sprint.displayOrder = index;
+          });
+        },
+        error: (err: HttpErrorResponse) => {
+          this.busy.set(false);
+          this.actionError.set(err.error?.message ?? 'Sprint sıralaması kaydedilemedi.');
+          this.loadKapsam();
         }
       });
   }
@@ -839,6 +917,9 @@ export class TeamKapsamPage implements OnInit {
       next: (data) => {
         this.kapsam.set(data);
         this.backlogList = [...(data.backlogTasks ?? [])];
+        this.sprintList = (data.sprints ?? []).filter(
+          (sprint) => Number(sprint.status) !== SprintStatus.Cancelled
+        );
         const map: Record<number, SprintTask[]> = {};
         for (const sprint of data.sprints) {
           map[sprint.id] = [...(sprint.tasks ?? [])];

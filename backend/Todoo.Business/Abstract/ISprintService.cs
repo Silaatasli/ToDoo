@@ -14,6 +14,7 @@ public interface ISprintService
     Task<ServiceResult> MoveTaskToBacklogAsync(int taskId, int? targetIndex, int userId);
     Task<ServiceResult> ReorderSprintTasksAsync(int sprintId, ReorderSprintTasksRequest request, int userId);
     Task<ServiceResult> ReorderBacklogAsync(int boardId, ReorderSprintTasksRequest request, int userId);
+    Task<ServiceResult> ReorderSprintsAsync(int boardId, ReorderSprintsRequest request, int userId);
     Task<ServiceResult<SprintDetailDto>> StartAsync(int sprintId, int userId);
     Task<ServiceResult<SprintDetailDto>> CompleteAsync(int sprintId, CompleteSprintRequest request, int userId);
     Task<ServiceResult<SprintDetailDto>> CancelAsync(int sprintId, CancelSprintRequest request, int userId);

@@ -140,6 +140,18 @@ public class SprintsController : ControllerBase
         return result.ToActionResult();
     }
 
+    [HttpPut("teams/{teamId:int}/boards/{boardId:int}/sprints/reorder")]
+    public async Task<IActionResult> ReorderSprints(int teamId, int boardId, [FromBody] ReorderSprintsRequest request)
+    {
+        if (!TryGetUserId(out var userId))
+        {
+            return Unauthorized(new { success = false, message = "Geçerli bir kullanıcı bilgisi bulunamadı." });
+        }
+
+        var result = await _sprintService.ReorderSprintsAsync(boardId, request, userId);
+        return result.ToActionResult();
+    }
+
     [HttpPost("sprints/{sprintId:int}/start")]
     public async Task<IActionResult> Start(int sprintId)
     {

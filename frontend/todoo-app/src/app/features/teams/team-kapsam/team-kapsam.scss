@@ -66,10 +66,52 @@
   &.is-active {
     border-color: color-mix(in srgb, var(--primary) 45%, var(--border-soft));
   }
+
+  &.sprint-drop-target {
+    outline: 2px dashed color-mix(in srgb, var(--primary) 55%, transparent);
+    outline-offset: -2px;
+  }
+}
+
+.accordion-head-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.sprint-drag-handle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding: 0 0.35rem 0 0.55rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: grab;
+  font-size: 0.85rem;
+  letter-spacing: -0.12em;
+  line-height: 1;
+
+  &:hover:not(:disabled) {
+    color: var(--text);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+
+  &:active:not(:disabled) {
+    cursor: grabbing;
+  }
 }
 
 .accordion-head {
+  flex: 1 1 auto;
   width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 0.55rem;
@@ -79,6 +121,11 @@
   cursor: pointer;
   color: var(--text);
   text-align: left;
+}
+
+.accordion-head-row .accordion-head {
+  width: auto;
+  padding-left: 0.35rem;
 }
 
 .chevron {

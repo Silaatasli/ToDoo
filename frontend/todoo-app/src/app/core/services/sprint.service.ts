@@ -73,4 +73,10 @@ export class SprintService {
       taskIds
     });
   }
+
+  reorderSprints(teamId: number, boardId: number, sprintIds: number[]): Observable<void> {
+    return this.http.put<void>(`${this.api}/teams/${teamId}/boards/${boardId}/sprints/reorder`, {
+      sprintIds
+    });
+  }
 }

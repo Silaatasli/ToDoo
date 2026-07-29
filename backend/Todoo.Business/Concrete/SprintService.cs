@@ -445,6 +445,56 @@ public class SprintService : ISprintService
         return await ApplyReorderAsync(tasks, request.TaskIds);
     }
 
+    public async Task<ServiceResult> ReorderSprintsAsync(
+        int boardId,
+        ReorderSprintsRequest request,
+        int userId)
+    {
+        var board = await _unitOfWork.Boards.GetByIdAsync(boardId);
+        if (board is null)
+        {
+            return ServiceResult.Fail("Pano bulunamadi.", ServiceErrorKind.NotFound);
+        }
+
+        if (!await IsTeamMemberAsync(board.TeamId, userId))
+        {
+            return ServiceResult.Fail("Bu panoya erisim yetkiniz yok.", ServiceErrorKind.Forbidden);
+        }
+
+        var sprints = (await _unitOfWork.Sprints.GetAllAsync())
+            .Where(sprint => sprint.BoardId == boardId && sprint.Status != SprintStatus.Cancelled)
+            .OrderBy(sprint => sprint.DisplayOrder)
+            .ThenBy(sprint => sprint.Id)
+            .ToList();
+
+        var orderedIds = request.SprintIds ?? [];
+        if (orderedIds.Count != sprints.Count || orderedIds.Distinct().Count() != orderedIds.Count)
+        {
+            return ServiceResult.Fail("Sprint siralama listesi gecersiz.");
+        }
+
+        var map = sprints.ToDictionary(sprint => sprint.Id);
+        if (orderedIds.Any(id => !map.ContainsKey(id)))
+        {
+            return ServiceResult.Fail("Sprint siralama listesi bu panodaki sprintlerle eslesmiyor.");
+        }
+
+        for (var i = 0; i < orderedIds.Count; i++)
+        {
+            var sprint = map[orderedIds[i]];
+            if (sprint.DisplayOrder == i)
+            {
+                continue;
+            }
+
+            sprint.DisplayOrder = i;
+            _unitOfWork.Sprints.Update(sprint);
+        }
+
+        await _unitOfWork.SaveChangesAsync();
+        return ServiceResult.Ok();
+    }
+
     public async Task<ServiceResult<SprintDetailDto>> StartAsync(int sprintId, int userId)
     {
         var sprintResult = await GetSprintIfMemberAsync(sprintId, userId);

@@ -76,6 +76,11 @@ public class ReorderSprintTasksRequest
     public List<int> TaskIds { get; set; } = [];
 }
 
+public class ReorderSprintsRequest
+{
+    public List<int> SprintIds { get; set; } = [];
+}
+
 /// <summary>incompleteDestination: "backlog" veya "sprint".</summary>
 public class CompleteSprintRequest
 {

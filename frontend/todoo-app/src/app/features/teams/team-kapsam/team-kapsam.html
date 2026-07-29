@@ -34,14 +34,36 @@
         <div class="state-box error">{{ error() }}</div>
       } @else if (kapsam(); as data) {
         <section class="accordion-list" cdkDropListGroup>
-          @for (sprint of visibleSprints(); track sprint.id) {
-            <article class="accordion" [class.is-active]="isActive(sprint)">
-              <button type="button" class="accordion-head" (click)="toggleSprint(sprint.id)">
-                <span class="chevron" [class.open]="isSprintExpanded(sprint.id)">▸</span>
-                <span class="accordion-title">{{ sprint.name }}</span>
-                <span class="status-pill" [attr.data-status]="sprint.status">{{ statusLabel(sprint.status) }}</span>
-                <span class="count">{{ tasksForSprint(sprint.id).length }}</span>
-              </button>
+          @for (sprint of sprintList; track sprint.id; let sprintIndex = $index) {
+            <article
+              class="accordion"
+              [class.is-active]="isActive(sprint)"
+              [class.sprint-drop-target]="sprintDropTargetId() === sprint.id"
+              (dragover)="onSprintDragOver($event, sprint)"
+              (dragleave)="onSprintDragLeave($event, sprint)"
+              (drop)="onSprintDrop($event, sprintIndex)"
+            >
+              <div class="accordion-head-row">
+                <button
+                  type="button"
+                  class="sprint-drag-handle"
+                  draggable="true"
+                  [disabled]="busy()"
+                  title="Sprint sırasını değiştir"
+                  aria-label="Sprint sırasını değiştir"
+                  (dragstart)="onSprintDragStart($event, sprintIndex)"
+                  (dragend)="onSprintDragEnd()"
+                  (click)="$event.stopPropagation()"
+                >
+                  ⋮⋮
+                </button>
+                <button type="button" class="accordion-head" (click)="toggleSprint(sprint.id)">
+                  <span class="chevron" [class.open]="isSprintExpanded(sprint.id)">▸</span>
+                  <span class="accordion-title">{{ sprint.name }}</span>
+                  <span class="status-pill" [attr.data-status]="sprint.status">{{ statusLabel(sprint.status) }}</span>
+                  <span class="count">{{ tasksForSprint(sprint.id).length }}</span>
+                </button>
+              </div>
 
               @if (isSprintExpanded(sprint.id)) {
                 <div class="sprint-meta">
