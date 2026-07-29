@@ -7,4 +7,5 @@ public static class NotificationTypes
     public const string TeamMemberAdded = "TeamMemberAdded";
     public const string Announcement = "Announcement";
     public const string Mention = "Mention";
+    public const string SprintStarted = "SprintStarted";
 }

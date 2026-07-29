@@ -28,11 +28,13 @@ import {
 import {
   BoardColumn,
   BoardListItem,
+  Priority,
   TeamBoard,
   TeamDetail
 } from '../../../models/team.model';
 import { AppLayout } from '../../../shared/components/app-layout/app-layout';
 import { TeamWorkspaceShell } from '../../../shared/components/team-workspace-shell/team-workspace-shell';
+import { initial, priorityClass, priorityLabel } from '../team-board/board-ui.utils';
 import { TaskDetailModalComponent } from '../team-board/components/task-detail-modal/task-detail-modal';
 
 type DropListId = 'backlog' | `sprint-${number}`;
@@ -257,11 +259,35 @@ export class TeamKapsamPage implements OnInit {
         return 'Aktif sprinte görev eklendi';
       case 'TaskRemovedAfterSprintStart':
         return 'Aktif sprintten görev çıkarıldı';
+      case 'TaskAddedToSprint':
+        return 'Sprinte görev eklendi';
+      case 'TaskRemovedFromSprint':
+        return 'Sprintten görev çıkarıldı';
       case 'SprintScopeChanged':
         return 'Sprint kapsamı değişti';
       default:
         return actionType;
     }
+  }
+
+  taskKey(task: SprintTask): string {
+    return `T-${task.id}`;
+  }
+
+  taskPriorityLabel(priority: Priority): string {
+    return priorityLabel(priority);
+  }
+
+  taskPriorityClass(priority: Priority): string {
+    return priorityClass(priority);
+  }
+
+  assigneeInitial(task: SprintTask): string {
+    return initial(task.assignedToEmail ?? '?');
+  }
+
+  assigneePhoto(task: SprintTask): string | null {
+    return this.memberPhotoUrlFn(task.assignedToUserId);
   }
 
   isActivityOpen(sprintId: number): boolean {

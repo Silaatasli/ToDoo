@@ -44,6 +44,7 @@ public class RedisNotificationStore : INotificationStore
             BoardId = message.BoardId,
             TaskId = message.TaskId,
             AnnouncementId = message.AnnouncementId,
+            SprintId = message.SprintId,
             IsRead = false,
             CreatedAtUtc = message.CreatedAtUtc
         };

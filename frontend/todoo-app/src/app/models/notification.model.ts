@@ -1,4 +1,10 @@
-export type NotificationType = 'TaskAssigned' | 'CommentReply' | 'TeamMemberAdded' | 'Announcement' | 'Mention';
+export type NotificationType =
+  | 'TaskAssigned'
+  | 'CommentReply'
+  | 'TeamMemberAdded'
+  | 'Announcement'
+  | 'Mention'
+  | 'SprintStarted';
 
 export interface AppNotification {
   id: string;
@@ -9,6 +15,7 @@ export interface AppNotification {
   boardId?: number | null;
   taskId?: number | null;
   announcementId?: number | null;
+  sprintId?: number | null;
   isRead: boolean;
   createdAtUtc: string;
 }

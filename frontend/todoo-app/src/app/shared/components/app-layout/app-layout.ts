@@ -319,6 +319,16 @@ export class AppLayout implements OnInit, OnDestroy {
       return;
     }
 
+    if (item.type === 'SprintStarted' && item.teamId && item.boardId) {
+      void this.router.navigate(['/teams', item.teamId, 'boards', item.boardId]);
+      return;
+    }
+
+    if (item.type === 'SprintStarted' && item.teamId) {
+      void this.router.navigate(['/teams', item.teamId, 'kapsam']);
+      return;
+    }
+
     if (item.teamId && item.boardId && item.taskId) {
       void this.router.navigate(['/teams', item.teamId, 'boards', item.boardId], {
         queryParams: { taskId: item.taskId }
@@ -353,6 +363,8 @@ export class AppLayout implements OnInit, OnDestroy {
         return 'Takım duyurusu';
       case 'Mention':
         return 'Sizden bahsedildi';
+      case 'SprintStarted':
+        return 'Sprint başladı';
       default:
         return 'Bildirim';
     }
@@ -370,6 +382,8 @@ export class AppLayout implements OnInit, OnDestroy {
         return 'tone-announce';
       case 'Mention':
         return 'tone-mention';
+      case 'SprintStarted':
+        return 'tone-sprint';
       default:
         return 'tone-default';
     }

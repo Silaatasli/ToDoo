@@ -91,6 +91,59 @@
   }
 }
 
+.sla-empty-note {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--text) 3%, var(--surface));
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.sla-sprint-context {
+  margin: 0 0 0.85rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+
+  .sla-sprint-label {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 650;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.85rem;
+    font-size: 0.84rem;
+    color: var(--text);
+
+    strong {
+      font-weight: 650;
+    }
+
+    span {
+      color: var(--muted);
+    }
+  }
+}
+
 .sla-grid {
   display: grid;
   grid-template-columns: 1.4fr repeat(3, minmax(0, 1fr));

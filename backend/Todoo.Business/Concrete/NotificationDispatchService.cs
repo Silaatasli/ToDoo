@@ -219,6 +219,89 @@ public class NotificationDispatchService
         });
     }
 
+    /// <summary>Sprint baslatildi. Baslatan haric takim uyelerine gider.</summary>
+    public async Task NotifySprintStartedAsync(
+        IEnumerable<int> memberUserIds,
+        int actorUserId,
+        int teamId,
+        int boardId,
+        int sprintId,
+        string sprintName,
+        string boardName,
+        string teamName,
+        string actorDisplayName)
+    {
+        var actor = string.IsNullOrWhiteSpace(actorDisplayName) ? "Bir kullanıcı" : actorDisplayName.Trim();
+        var team = string.IsNullOrWhiteSpace(teamName) ? "takım" : teamName.Trim();
+        var sprint = Truncate(string.IsNullOrWhiteSpace(sprintName) ? "Sprint" : sprintName.Trim(), 80);
+        var board = Truncate(string.IsNullOrWhiteSpace(boardName) ? "Pano" : boardName.Trim(), 60);
+        var title = "Sprint başladı";
+        var body = Truncate($"{actor}, \"{sprint}\" sprintini başlattı · {board} · {team}", 220);
+
+        var recipients = memberUserIds
+            .Where(id => id > 0 && id != actorUserId)
+            .Distinct()
+            .ToList();
+
+        if (recipients.Count == 0)
+        {
+            _logger.LogInformation(
+                "SprintStarted bildirimi icin alici yok. TeamId={TeamId}, SprintId={SprintId}, ActorUserId={ActorUserId}",
+                teamId,
+                sprintId,
+                actorUserId);
+            return;
+        }
+
+        _logger.LogInformation(
+            "SprintStarted bildirimi gonderiliyor. TeamId={TeamId}, SprintId={SprintId}, Recipients={Count}",
+            teamId,
+            sprintId,
+            recipients.Count);
+
+        var storeTasks = recipients.Select(userId => StoreOnlyAsync(new NotificationMessage
+        {
+            Type = NotificationTypes.SprintStarted,
+            TargetUserId = userId,
+            ActorUserId = actorUserId,
+            Title = title,
+            Body = body,
+            TeamId = teamId,
+            BoardId = boardId,
+            SprintId = sprintId,
+            DirectDelivered = true
+        }));
+
+        await Task.WhenAll(storeTasks);
+
+        try
+        {
+            await _realtime.SendToTeamAsync(
+                teamId,
+                new NotificationItemDto
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Type = NotificationTypes.SprintStarted,
+                    Title = title,
+                    Body = body,
+                    TeamId = teamId,
+                    BoardId = boardId,
+                    SprintId = sprintId,
+                    IsRead = false,
+                    CreatedAtUtc = DateTime.UtcNow
+                },
+                excludeUserId: actorUserId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "SprintStarted takim broadcast'i basarisiz. TeamId={TeamId}, SprintId={SprintId}",
+                teamId,
+                sprintId);
+        }
+    }
+
     private async Task PublishSafeAsync(NotificationMessage message)
     {
         try
@@ -328,6 +411,7 @@ public class NotificationDispatchService
         BoardId = message.BoardId,
         TaskId = message.TaskId,
         AnnouncementId = message.AnnouncementId,
+        SprintId = message.SprintId,
         IsRead = false,
         CreatedAtUtc = message.CreatedAtUtc
     };

@@ -311,6 +311,7 @@ export class NotificationHubService {
       boardId: (item['boardId'] ?? item['BoardId'] ?? null) as number | null,
       taskId: (item['taskId'] ?? item['TaskId'] ?? null) as number | null,
       announcementId: (item['announcementId'] ?? item['AnnouncementId'] ?? null) as number | null,
+      sprintId: (item['sprintId'] ?? item['SprintId'] ?? null) as number | null,
       isRead: Boolean(item['isRead'] ?? item['IsRead'] ?? false),
       createdAtUtc: String(item['createdAtUtc'] ?? item['CreatedAtUtc'] ?? new Date().toISOString())
     };

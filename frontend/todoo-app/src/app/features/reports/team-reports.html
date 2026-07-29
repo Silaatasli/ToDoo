@@ -63,60 +63,80 @@
           <div class="sla-section-head">
             <h2>
               @if (isViewingOwnSla()) {
-                Bu takımdaki SLA performansım
+                Aktif sprint SLA performansım
               } @else {
-                Seçili üyenin SLA detayı
+                Seçili üyenin aktif sprint SLA detayı
               }
             </h2>
             <p>
               {{ sla.displayName ? sla.displayName + ' · ' : '' }}
+              Aktif sprint(ler)deki
               @if (isViewingOwnSla()) {
-                Due date olan ve sana atanmış ana görevler
+                sana atanmış
               } @else {
-                Due date olan ve bu üyeye atanmış ana görevler
+                bu üyeye atanmış
               }
-              · öncelik ağırlıklı uyum
+              ana görevler ·
             </p>
           </div>
 
-          <div class="sla-grid">
-            <article class="sla-hero-card">
-              <span class="card-label">SLA uyumu</span>
-              <strong class="sla-hero-value">{{ slaComplianceLabel() }}</strong>
-              <p class="sla-hero-note">
-                @if (sla.compliancePercent == null) {
-                  Henüz sonuçlanmış (Met/Breached) görev yok.
-                } @else {
-                  Zamanında tamamlananların öncelik ağırlıklı oranı.
+          @if (!hasActiveSprintForSla()) {
+            <p class="sla-empty-note">
+              Bu takımda aktif sprint yok. SLA, aktif sprintteki atanmış görevler üzerinden hesaplanır.
+            </p>
+          } @else {
+            <div class="sla-sprint-context">
+              <span class="sla-sprint-label">Kapsam</span>
+              <ul>
+                @for (sprint of slaActiveSprints(); track sprint.sprintId) {
+                  <li>
+                    <strong>{{ sprint.sprintName }}</strong>
+                    <span>{{ sprint.boardName }}</span>
+                    <span>Bitiş {{ sprint.plannedEndDate | date: 'dd MMM yyyy' }}</span>
+                  </li>
                 }
-              </p>
-            </article>
+              </ul>
+            </div>
 
-            <button
-              type="button"
-              class="summary-card clickable success"
-              [disabled]="sla.metCount === 0"
-              (click)="openSlaMetModal()"
-            >
-              <span class="card-label">Zamanında (Met)</span>
-              <strong class="card-value success">{{ sla.metCount }}</strong>
-            </button>
+            <div class="sla-grid">
+              <article class="sla-hero-card">
+                <span class="card-label">SLA uyumu</span>
+                <strong class="sla-hero-value">{{ slaComplianceLabel() }}</strong>
+                <p class="sla-hero-note">
+                  @if (sla.compliancePercent == null) {
+                    Henüz sonuçlanmış görev yok.
+                  } @else {
+                    Zamanında tamamlananların öncelik ağırlıklı oranı.
+                  }
+                </p>
+              </article>
 
-            <button
-              type="button"
-              class="summary-card clickable danger"
-              [disabled]="sla.breachedCount === 0"
-              (click)="openSlaBreachedModal()"
-            >
-              <span class="card-label">İhlal (Breached)</span>
-              <strong class="card-value">{{ sla.breachedCount }}</strong>
-            </button>
+              <button
+                type="button"
+                class="summary-card clickable success"
+                [disabled]="sla.metCount === 0"
+                (click)="openSlaMetModal()"
+              >
+                <span class="card-label">Zamanında (Met)</span>
+                <strong class="card-value success">{{ sla.metCount }}</strong>
+              </button>
 
-            <article class="summary-card">
-              <span class="card-label">Takipte (OnTrack)</span>
-              <strong class="card-value">{{ sla.onTrackCount }}</strong>
-            </article>
-          </div>
+              <button
+                type="button"
+                class="summary-card clickable danger"
+                [disabled]="sla.breachedCount === 0"
+                (click)="openSlaBreachedModal()"
+              >
+                <span class="card-label">İhlal (Breached)</span>
+                <strong class="card-value">{{ sla.breachedCount }}</strong>
+              </button>
+
+              <article class="summary-card">
+                <span class="card-label">Takipte (OnTrack)</span>
+                <strong class="card-value">{{ sla.onTrackCount }}</strong>
+              </article>
+            </div>
+          }
         </section>
       }
 
@@ -124,10 +144,19 @@
         <section class="sla-members-section">
           <div class="sla-section-head">
             <h2>Takım üyeleri SLA özeti</h2>
-            <p>Bir üyeye tıklayarak üstte SLA detaylarını açabilirsin.</p>
+            <p>
+              Aktif sprint(ler)deki atanmış görevler.
+              @if (!teamSla.hasActiveSprint) {
+                Şu an aktif sprint yok.
+              } @else {
+                Bir üyeye tıklayarak üstte detay açabilirsin.
+              }
+            </p>
           </div>
 
-          @if (teamSla.members.length === 0) {
+          @if (!teamSla.hasActiveSprint) {
+            <p class="sla-members-empty">Aktif sprint olmadığı için üye SLA özeti boş.</p>
+          } @else if (teamSla.members.length === 0) {
             <p class="sla-members-empty">Üye bulunamadı.</p>
           } @else {
             <div class="sla-members-table-wrap">

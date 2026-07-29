@@ -91,6 +91,12 @@ export class TeamReports implements OnInit {
     return `${sla.compliancePercent}%`;
   });
 
+  readonly slaActiveSprints = computed(
+    () => this.displayedSla()?.activeSprints ?? this.membersSla()?.activeSprints ?? []
+  );
+
+  readonly hasActiveSprintForSla = computed(() => this.slaActiveSprints().length > 0);
+
   readonly priorityGradient = computed(() => {
     const data = this.report();
     const total = this.priorityTotal();

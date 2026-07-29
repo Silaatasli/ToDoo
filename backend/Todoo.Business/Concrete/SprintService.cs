@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Todoo.Business.Abstract;
+using Todoo.Business.Helpers;
 using Todoo.Business.Models;
 using Todoo.Business.Models.Sprints;
 using Todoo.DataAccess.UnitOfWork;
@@ -16,15 +17,18 @@ public class SprintService : ISprintService
 
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISprintAuditSearchService _auditSearch;
+    private readonly NotificationDispatchService _notificationDispatch;
     private readonly ILogger<SprintService> _logger;
 
     public SprintService(
         IUnitOfWork unitOfWork,
         ISprintAuditSearchService auditSearch,
+        NotificationDispatchService notificationDispatch,
         ILogger<SprintService> logger)
     {
         _unitOfWork = unitOfWork;
         _auditSearch = auditSearch;
+        _notificationDispatch = notificationDispatch;
         _logger = logger;
     }
 
@@ -306,8 +310,23 @@ public class SprintService : ISprintService
             {
                 return ServiceResult<SprintTaskDto>.Fail("Tamamlanmis/iptal sprintten gorev tasinamadi.");
             }
+
+            // Sprint -> sprint: onceki sprinte cikarma kaydi
+            if (previous is not null && previous.Status is SprintStatus.Planned or SprintStatus.Active)
+            {
+                await LogAsync(
+                    previous,
+                    userId,
+                    previous.Status == SprintStatus.Active
+                        ? SprintActivityAction.TaskRemovedAfterSprintStart
+                        : SprintActivityAction.TaskRemovedFromSprint,
+                    task.Id.ToString(),
+                    $"sprint:{sprint.Id}",
+                    task.Id);
+            }
         }
 
+        var fromLabel = previousSprintId.HasValue ? $"sprint:{previousSprintId}" : "backlog";
         await DetachFromCurrentSprintAsync(task);
         var siblings = await GetSprintRootTasksAsync(sprint.Id);
         var insertAt = NormalizeIndex(request.TargetIndex, siblings.Count);
@@ -317,23 +336,15 @@ public class SprintService : ISprintService
         _unitOfWork.TaskItems.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        if (sprint.Status == SprintStatus.Active)
-        {
-            await LogAsync(
-                sprint,
-                userId,
-                SprintActivityAction.TaskAddedAfterSprintStart,
-                previousSprintId?.ToString(),
-                task.Id.ToString(),
-                task.Id);
-            await LogAsync(
-                sprint,
-                userId,
-                SprintActivityAction.SprintScopeChanged,
-                null,
-                $"Task {task.Id} added",
-                task.Id);
-        }
+        await LogAsync(
+            sprint,
+            userId,
+            sprint.Status == SprintStatus.Active
+                ? SprintActivityAction.TaskAddedAfterSprintStart
+                : SprintActivityAction.TaskAddedToSprint,
+            fromLabel,
+            task.Id.ToString(),
+            task.Id);
 
         return ServiceResult<SprintTaskDto>.Ok(await MapSingleTaskAsync(task.Id));
     }
@@ -378,23 +389,15 @@ public class SprintService : ISprintService
         _unitOfWork.TaskItems.Update(task);
         await _unitOfWork.SaveChangesAsync();
 
-        if (wasActive)
-        {
-            await LogAsync(
-                sprint,
-                userId,
-                SprintActivityAction.TaskRemovedAfterSprintStart,
-                task.Id.ToString(),
-                "backlog",
-                task.Id);
-            await LogAsync(
-                sprint,
-                userId,
-                SprintActivityAction.SprintScopeChanged,
-                null,
-                $"Task {task.Id} removed to backlog",
-                task.Id);
-        }
+        await LogAsync(
+            sprint,
+            userId,
+            wasActive
+                ? SprintActivityAction.TaskRemovedAfterSprintStart
+                : SprintActivityAction.TaskRemovedFromSprint,
+            task.Id.ToString(),
+            "backlog",
+            task.Id);
 
         return ServiceResult.Ok();
     }
@@ -489,7 +492,36 @@ public class SprintService : ISprintService
         }
 
         await LogAsync(sprint, userId, SprintActivityAction.SprintStarted, SprintStatus.Planned.ToString(), SprintStatus.Active.ToString(), null);
+        await NotifySprintStartedAsync(sprint, userId);
         return await GetByIdAsync(sprint.Id, userId);
+    }
+
+    private async Task NotifySprintStartedAsync(Sprint sprint, int actorUserId)
+    {
+        var team = await _unitOfWork.Teams.GetByIdAsync(sprint.TeamId);
+        var board = await _unitOfWork.Boards.GetByIdAsync(sprint.BoardId);
+        var actor = await _unitOfWork.Users.GetByIdAsync(actorUserId);
+
+        var memberIds = (await _unitOfWork.TeamMembers.GetAllAsync())
+            .Where(member => member.TeamId == sprint.TeamId)
+            .Select(member => member.UserId)
+            .ToHashSet();
+
+        if (team is not null)
+        {
+            memberIds.Add(team.LeaderUserId);
+        }
+
+        await _notificationDispatch.NotifySprintStartedAsync(
+            memberIds,
+            actorUserId,
+            sprint.TeamId,
+            sprint.BoardId,
+            sprint.Id,
+            sprint.Name,
+            board?.Name ?? string.Empty,
+            team?.Name ?? string.Empty,
+            actor is null ? string.Empty : UserDisplayNameHelper.Format(actor));
     }
 
     public async Task<ServiceResult<SprintDetailDto>> CompleteAsync(

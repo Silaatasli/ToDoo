@@ -739,9 +739,15 @@ public class TeamService : ITeamService
             .GroupBy(task => task.ParentTaskId!.Value)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var rootTasks = tasks
-            .Where(task => task.ParentTaskId == null && task.SprintId.HasValue)
-            .ToList();
+        var activeSprint = (await _unitOfWork.Sprints.GetAllAsync())
+            .FirstOrDefault(sprint => sprint.BoardId == board.Id && sprint.Status == SprintStatus.Active);
+
+        // Kanban: yalnizca aktif sprintin ana gorevleri (backlog / planned / completed disarida)
+        var rootTasks = activeSprint is null
+            ? []
+            : tasks
+                .Where(task => task.ParentTaskId == null && task.SprintId == activeSprint.Id)
+                .ToList();
 
         var categoryMap = (await _unitOfWork.Categories.GetAllAsync())
             .ToDictionary(category => category.Id, category => category.Name);
@@ -793,9 +799,6 @@ public class TeamService : ITeamService
             .OrderBy(task => task.DisplayOrder)
             .ThenBy(task => task.Id)
             .ToList();
-
-        var activeSprint = (await _unitOfWork.Sprints.GetAllAsync())
-            .FirstOrDefault(sprint => sprint.BoardId == board.Id && sprint.Status == SprintStatus.Active);
 
         return ServiceResult<TeamBoardDto>.Ok(new TeamBoardDto
         {

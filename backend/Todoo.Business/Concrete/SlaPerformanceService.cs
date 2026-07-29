@@ -4,6 +4,7 @@ using Todoo.Business.Models;
 using Todoo.Business.Models.Reports;
 using Todoo.DataAccess.UnitOfWork;
 using Todoo.Entities.Entities;
+using Todoo.Entities.Enums;
 
 namespace Todoo.Business.Concrete;
 
@@ -26,12 +27,15 @@ public class SlaPerformanceService : ISlaPerformanceService
             return ServiceResult<SlaPerformanceDto>.Fail(access.ErrorMessage!, access.ErrorKind ?? ServiceErrorKind.Validation);
         }
 
+        var activeSprints = await GetActiveSprintContextsAsync(teamId);
         var user = await _unitOfWork.Users.GetByIdAsync(userId);
+        var tasks = await GetActiveSprintAssignedTasksAsync(teamId, userId, activeSprints);
         var dto = BuildPerformanceDto(
             teamId,
             userId,
             user is null ? string.Empty : UserDisplayNameHelper.Format(user),
-            await GetAssignableTasksAsync(teamId, userId));
+            tasks,
+            activeSprints);
 
         return ServiceResult<SlaPerformanceDto>.Ok(dto);
     }
@@ -54,6 +58,7 @@ public class SlaPerformanceService : ISlaPerformanceService
             return ServiceResult<TeamSlaMembersDto>.Fail("Uye SLA ozetini yalnizca takim lideri gorebilir.", ServiceErrorKind.Forbidden);
         }
 
+        var activeSprints = await GetActiveSprintContextsAsync(teamId);
         var members = (await _unitOfWork.TeamMembers.GetAllAsync())
             .Where(item => item.TeamId == teamId)
             .ToList();
@@ -62,7 +67,7 @@ public class SlaPerformanceService : ISlaPerformanceService
             .Where(user => userIds.Contains(user.Id))
             .ToDictionary(user => user.Id);
 
-        var teamTasks = await GetTeamParentTasksAsync(teamId);
+        var scopedTasks = await GetActiveSprintParentTasksAsync(teamId, activeSprints);
         var memberDtos = new List<SlaPerformanceDto>();
 
         foreach (var member in members.OrderBy(item => item.UserId))
@@ -72,17 +77,19 @@ public class SlaPerformanceService : ISlaPerformanceService
                 continue;
             }
 
-            var assigned = teamTasks.Where(task => task.AssignedToUserId == member.UserId).ToList();
+            var assigned = scopedTasks.Where(task => task.AssignedToUserId == member.UserId).ToList();
             memberDtos.Add(BuildPerformanceDto(
                 teamId,
                 member.UserId,
                 UserDisplayNameHelper.Format(user),
-                assigned));
+                assigned,
+                activeSprints));
         }
 
         return ServiceResult<TeamSlaMembersDto>.Ok(new TeamSlaMembersDto
         {
             TeamId = teamId,
+            ActiveSprints = activeSprints,
             Members = memberDtos
         });
     }
@@ -103,20 +110,54 @@ public class SlaPerformanceService : ISlaPerformanceService
         return ServiceResult.Ok();
     }
 
-    private async Task<List<TaskItem>> GetAssignableTasksAsync(int teamId, int userId)
+    private async Task<List<SlaActiveSprintContextDto>> GetActiveSprintContextsAsync(int teamId)
     {
-        return (await GetTeamParentTasksAsync(teamId))
+        var boards = (await _unitOfWork.Boards.GetAllAsync())
+            .Where(board => board.TeamId == teamId)
+            .ToDictionary(board => board.Id, board => board.Name);
+
+        return (await _unitOfWork.Sprints.GetAllAsync())
+            .Where(sprint => sprint.TeamId == teamId && sprint.Status == SprintStatus.Active)
+            .OrderBy(sprint => sprint.BoardId)
+            .ThenBy(sprint => sprint.Id)
+            .Select(sprint => new SlaActiveSprintContextDto
+            {
+                SprintId = sprint.Id,
+                SprintName = sprint.Name,
+                BoardId = sprint.BoardId,
+                BoardName = boards.GetValueOrDefault(sprint.BoardId) ?? $"Pano #{sprint.BoardId}",
+                PlannedEndDate = sprint.PlannedEndDate
+            })
+            .ToList();
+    }
+
+    private async Task<List<TaskItem>> GetActiveSprintAssignedTasksAsync(
+        int teamId,
+        int userId,
+        IReadOnlyList<SlaActiveSprintContextDto> activeSprints)
+    {
+        return (await GetActiveSprintParentTasksAsync(teamId, activeSprints))
             .Where(task => task.AssignedToUserId == userId)
             .ToList();
     }
 
-    private async Task<List<TaskItem>> GetTeamParentTasksAsync(int teamId)
+    private async Task<List<TaskItem>> GetActiveSprintParentTasksAsync(
+        int teamId,
+        IReadOnlyList<SlaActiveSprintContextDto> activeSprints)
     {
+        if (activeSprints.Count == 0)
+        {
+            return [];
+        }
+
+        var activeSprintIds = activeSprints.Select(sprint => sprint.SprintId).ToHashSet();
         return (await _unitOfWork.TaskItems.GetAllAsync())
             .Where(task =>
                 task.TeamId == teamId
                 && !task.ParentTaskId.HasValue
-                && !task.DeletedAt.HasValue)
+                && !task.DeletedAt.HasValue
+                && task.SprintId.HasValue
+                && activeSprintIds.Contains(task.SprintId.Value))
             .ToList();
     }
 
@@ -124,23 +165,26 @@ public class SlaPerformanceService : ISlaPerformanceService
         int teamId,
         int userId,
         string displayName,
-        List<TaskItem> tasks)
+        List<TaskItem> tasks,
+        IReadOnlyList<SlaActiveSprintContextDto> activeSprints)
     {
         var now = DateTime.UtcNow;
         var (metWeight, totalResolvedWeight, metCount, breachedCount, onTrackCount) =
             SlaCalculator.Summarize(tasks, now);
 
+        var sprintNameById = activeSprints.ToDictionary(sprint => sprint.SprintId, sprint => sprint.SprintName);
+
         var breachedTasks = tasks
             .Where(task => SlaCalculator.GetStatus(task, now) == SlaStatus.Breached)
             .OrderByDescending(task => task.DueDate)
             .Take(10)
-            .Select(MapTaskItem)
+            .Select(task => MapTaskItem(task, sprintNameById))
             .ToList();
         var metTasks = tasks
             .Where(task => SlaCalculator.GetStatus(task, now) == SlaStatus.Met)
             .OrderByDescending(task => task.CompletedAt ?? task.DueDate)
             .Take(10)
-            .Select(MapTaskItem)
+            .Select(task => MapTaskItem(task, sprintNameById))
             .ToList();
 
         return new SlaPerformanceDto
@@ -152,17 +196,22 @@ public class SlaPerformanceService : ISlaPerformanceService
             MetCount = metCount,
             BreachedCount = breachedCount,
             OnTrackCount = onTrackCount,
+            ActiveSprints = activeSprints.ToList(),
             RecentMet = metTasks,
             RecentBreached = breachedTasks
         };
     }
 
-    private static SlaTaskItemDto MapTaskItem(TaskItem task) => new()
+    private static SlaTaskItemDto MapTaskItem(TaskItem task, IReadOnlyDictionary<int, string> sprintNameById) => new()
     {
         Id = task.Id,
         Title = task.Title,
         DueDate = task.DueDate,
         CompletedAt = task.CompletedAt,
-        Priority = (int)task.Priority
+        Priority = (int)task.Priority,
+        SprintId = task.SprintId,
+        SprintName = task.SprintId.HasValue && sprintNameById.TryGetValue(task.SprintId.Value, out var name)
+            ? name
+            : null
     };
 }

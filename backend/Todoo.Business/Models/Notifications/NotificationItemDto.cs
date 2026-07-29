@@ -18,6 +18,8 @@ public class NotificationItemDto
 
     public int? AnnouncementId { get; set; }
 
+    public int? SprintId { get; set; }
+
     public bool IsRead { get; set; }
 
     public DateTime CreatedAtUtc { get; set; }

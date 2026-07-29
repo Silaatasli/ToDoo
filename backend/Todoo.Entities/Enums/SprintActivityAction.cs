@@ -10,5 +10,7 @@ public enum SprintActivityAction
     SprintCancelled = 6,
     TaskAddedAfterSprintStart = 7,
     TaskRemovedAfterSprintStart = 8,
-    SprintScopeChanged = 9
+    SprintScopeChanged = 9,
+    TaskAddedToSprint = 10,
+    TaskRemovedFromSprint = 11
 }
