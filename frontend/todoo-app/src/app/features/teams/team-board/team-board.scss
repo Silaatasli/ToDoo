@@ -44,6 +44,42 @@
   min-width: 0;
 }
 
+.active-sprint-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0.15rem 0 0;
+  max-width: 100%;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.2;
+
+  &.is-empty {
+    font-style: italic;
+  }
+}
+
+.active-sprint-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22a06b;
+  flex-shrink: 0;
+}
+
+.active-sprint-name {
+  color: var(--text);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-sprint-status {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+
 .board-switcher {
   position: relative;
 }

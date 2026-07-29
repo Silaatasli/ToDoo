@@ -739,7 +739,9 @@ public class TeamService : ITeamService
             .GroupBy(task => task.ParentTaskId!.Value)
             .ToDictionary(group => group.Key, group => group.ToList());
 
-        var rootTasks = tasks.Where(task => task.ParentTaskId == null).ToList();
+        var rootTasks = tasks
+            .Where(task => task.ParentTaskId == null && task.SprintId.HasValue)
+            .ToList();
 
         var categoryMap = (await _unitOfWork.Categories.GetAllAsync())
             .ToDictionary(category => category.Id, category => category.Name);
@@ -782,6 +784,8 @@ public class TeamService : ITeamService
                 SubtaskStatus = null,
                 SubtaskDoneCount = doneCount,
                 SubtaskTotal = children.Count,
+                SprintId = task.SprintId,
+                SprintOrder = task.SprintOrder,
                 TeamName = team.Name,
                 IsPersonalTeam = teamEntity?.IsPersonal ?? false
             };
@@ -790,12 +794,17 @@ public class TeamService : ITeamService
             .ThenBy(task => task.Id)
             .ToList();
 
+        var activeSprint = (await _unitOfWork.Sprints.GetAllAsync())
+            .FirstOrDefault(sprint => sprint.BoardId == board.Id && sprint.Status == SprintStatus.Active);
+
         return ServiceResult<TeamBoardDto>.Ok(new TeamBoardDto
         {
             TeamId = team.Id,
             TeamName = team.Name,
             BoardId = board.Id,
             BoardName = board.Name,
+            ActiveSprintId = activeSprint?.Id,
+            ActiveSprintName = activeSprint?.Name,
             Columns = columns.Select(column => new TeamBoardColumnWithTasksDto
             {
                 Id = column.Id,

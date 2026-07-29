@@ -54,4 +54,8 @@ public class TaskListDto
     public int SubtaskDoneCount { get; set; }
 
     public int SubtaskTotal { get; set; }
+
+    public int? SprintId { get; set; }
+
+    public int SprintOrder { get; set; }
 }

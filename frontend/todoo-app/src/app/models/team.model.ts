@@ -53,6 +53,8 @@ export interface TeamBoard {
   teamName: string;
   boardId: number;
   boardName: string;
+  activeSprintId?: number | null;
+  activeSprintName?: string | null;
   columns: BoardColumnWithTasks[];
 }
 
@@ -175,6 +177,8 @@ export interface TaskListItem {
   subtaskStatus?: SubtaskStatus | null;
   subtaskDoneCount?: number;
   subtaskTotal?: number;
+  sprintId?: number | null;
+  sprintOrder?: number;
 }
 
 export enum TaskActivityAction {

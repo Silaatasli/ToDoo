@@ -50,6 +50,16 @@
                 </div>
               }
             </div>
+
+            @if (board()?.activeSprintName; as sprintName) {
+              <p class="active-sprint-label" title="Aktif sprint">
+                <span class="active-sprint-dot" aria-hidden="true"></span>
+                <span class="active-sprint-name">{{ sprintName }}</span>
+                <span class="active-sprint-status">Aktif</span>
+              </p>
+            } @else if (board()) {
+              <p class="active-sprint-label is-empty">Aktif sprint yok</p>
+            }
           </div>
           @if (team()) {
             <div class="assignee-filter">

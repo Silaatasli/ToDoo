@@ -21,6 +21,8 @@ public class TodooDbContext : DbContext
     public DbSet<TaskComment> TaskComments => Set<TaskComment>();
     public DbSet<CommentAttachment> CommentAttachments => Set<CommentAttachment>();
     public DbSet<TeamAnnouncement> TeamAnnouncements => Set<TeamAnnouncement>();
+    public DbSet<Sprint> Sprints => Set<Sprint>();
+    public DbSet<SprintActivityLog> SprintActivityLogs => Set<SprintActivityLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -175,7 +177,82 @@ public class TodooDbContext : DbContext
             .HasIndex(task => task.ParentTaskId);
 
         modelBuilder.Entity<TaskItem>()
+            .HasOne(task => task.Sprint)
+            .WithMany(sprint => sprint.Tasks)
+            .HasForeignKey(task => task.SprintId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<TaskItem>()
+            .HasIndex(task => task.SprintId);
+
+        modelBuilder.Entity<TaskItem>()
             .HasQueryFilter(task => task.DeletedAt == null);
+
+        modelBuilder.Entity<Sprint>()
+            .Property(sprint => sprint.Name)
+            .HasMaxLength(200)
+            .IsRequired();
+
+        modelBuilder.Entity<Sprint>()
+            .Property(sprint => sprint.Goal)
+            .HasMaxLength(1000);
+
+        modelBuilder.Entity<Sprint>()
+            .HasOne(sprint => sprint.Team)
+            .WithMany()
+            .HasForeignKey(sprint => sprint.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<Sprint>()
+            .HasOne(sprint => sprint.Board)
+            .WithMany(board => board.Sprints)
+            .HasForeignKey(sprint => sprint.BoardId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Sprint>()
+            .HasOne(sprint => sprint.CreatedBy)
+            .WithMany()
+            .HasForeignKey(sprint => sprint.CreatedByUserId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Bir panoda ayni anda yalnizca bir Active sprint.
+        modelBuilder.Entity<Sprint>()
+            .HasIndex(sprint => sprint.BoardId)
+            .IsUnique()
+            .HasFilter("[Status] = 1")
+            .HasDatabaseName("IX_Sprints_BoardId_OneActive");
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .Property(log => log.OldValue)
+            .HasMaxLength(500);
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .Property(log => log.NewValue)
+            .HasMaxLength(500);
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .HasOne(log => log.Team)
+            .WithMany()
+            .HasForeignKey(log => log.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .HasOne(log => log.Sprint)
+            .WithMany(sprint => sprint.ActivityLogs)
+            .HasForeignKey(log => log.SprintId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .HasOne(log => log.Task)
+            .WithMany()
+            .HasForeignKey(log => log.TaskId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        modelBuilder.Entity<SprintActivityLog>()
+            .HasOne(log => log.User)
+            .WithMany()
+            .HasForeignKey(log => log.UserId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<TaskActivityLog>()
             .Property(log => log.OldValue)

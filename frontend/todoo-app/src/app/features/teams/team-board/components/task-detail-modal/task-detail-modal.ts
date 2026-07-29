@@ -70,6 +70,8 @@ export class TaskDetailModalComponent {
   readonly categories = input<Category[]>([]);
   readonly members = input<TeamMember[]>([]);
   readonly isLeader = input(false);
+  /** `modal` = ortada modal; `panel` = sağda Jira tarzı detay paneli */
+  readonly presentation = input<'modal' | 'panel'>('modal');
   readonly photoUrlFn = input.required<(userId: number | null | undefined) => string | null>();
 
   readonly closed = output<void>();

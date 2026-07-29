@@ -19,6 +19,8 @@ public class UnitOfWork : IUnitOfWork
     private IRepository<TaskComment>? _taskComments;
     private IRepository<CommentAttachment>? _commentAttachments;
     private IRepository<TeamAnnouncement>? _teamAnnouncements;
+    private IRepository<Sprint>? _sprints;
+    private IRepository<SprintActivityLog>? _sprintActivityLogs;
 
     public UnitOfWork(TodooDbContext context)
     {
@@ -37,6 +39,8 @@ public class UnitOfWork : IUnitOfWork
     public IRepository<TaskComment> TaskComments => _taskComments ??= new Repository<TaskComment>(_context);
     public IRepository<CommentAttachment> CommentAttachments => _commentAttachments ??= new Repository<CommentAttachment>(_context);
     public IRepository<TeamAnnouncement> TeamAnnouncements => _teamAnnouncements ??= new Repository<TeamAnnouncement>(_context);
+    public IRepository<Sprint> Sprints => _sprints ??= new Repository<Sprint>(_context);
+    public IRepository<SprintActivityLog> SprintActivityLogs => _sprintActivityLogs ??= new Repository<SprintActivityLog>(_context);
 
     public Task<int> SaveChangesAsync()
     {

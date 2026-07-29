@@ -22,4 +22,7 @@ public class Board
 
     [JsonIgnore]
     public ICollection<TaskItem> Tasks { get; set; } = [];
+
+    [JsonIgnore]
+    public ICollection<Sprint> Sprints { get; set; } = [];
 }

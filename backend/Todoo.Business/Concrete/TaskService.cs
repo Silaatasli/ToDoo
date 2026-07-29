@@ -153,6 +153,25 @@ public class TaskService : ITaskService
         task.IsCompleted = targetColumn.IsCompletedColumn;
         ApplyAssignmentState(task, assignedToUserId, userId);
 
+        var activeSprint = (await _unitOfWork.Sprints.GetAllAsync())
+            .FirstOrDefault(sprint => sprint.BoardId == boardId && sprint.Status == SprintStatus.Active);
+        if (activeSprint is not null)
+        {
+            var sprintTasks = (await _unitOfWork.TaskItems.GetAllAsync())
+                .Where(item => item.SprintId == activeSprint.Id && item.ParentTaskId == null)
+                .ToList();
+            task.SprintId = activeSprint.Id;
+            task.SprintOrder = sprintTasks.Count == 0 ? 0 : sprintTasks.Max(item => item.SprintOrder) + 1;
+        }
+        else
+        {
+            var backlog = (await _unitOfWork.TaskItems.GetAllAsync())
+                .Where(item => item.BoardId == boardId && item.ParentTaskId == null && item.SprintId == null)
+                .ToList();
+            task.SprintId = null;
+            task.SprintOrder = backlog.Count == 0 ? 0 : backlog.Max(item => item.SprintOrder) + 1;
+        }
+
         _unitOfWork.TaskItems.Add(task);
         await _unitOfWork.SaveChangesAsync();
 
@@ -1199,7 +1218,9 @@ public class TaskService : ITaskService
             ParentTaskId = task.ParentTaskId,
             SubtaskStatus = task.SubtaskStatus,
             SubtaskDoneCount = doneCount,
-            SubtaskTotal = total
+            SubtaskTotal = total,
+            SprintId = task.SprintId,
+            SprintOrder = task.SprintOrder
         };
     }
 

@@ -1,5 +1,13 @@
-<div class="modal-backdrop" (click)="close()">
-  <section class="modal-card jira-detail-card" (click)="$event.stopPropagation()">
+<div
+  class="modal-backdrop"
+  [class.is-side-panel]="presentation() === 'panel'"
+  (click)="close()"
+>
+  <section
+    class="modal-card jira-detail-card"
+    [class.is-side-panel]="presentation() === 'panel'"
+    (click)="$event.stopPropagation()"
+  >
     <div class="modal-header">
       @if (detail(); as headerTask) {
         <div class="detail-header-meta">

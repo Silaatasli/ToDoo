@@ -71,12 +71,21 @@ public class TaskItem
     /// <summary>Tamamlandi sutununa alindigi an (UTC). SLA hesabi icin.</summary>
     public DateTime? CompletedAt { get; set; }
 
+    /// <summary>Null ise backlog; dolu ise ilgili sprint.</summary>
+    public int? SprintId { get; set; }
+
+    /// <summary>Sprint veya backlog icindeki sira (0 tabanli).</summary>
+    public int SprintOrder { get; set; }
+
     public DateTime? DeletedAt { get; set; }
 
     public int? DeletedByUserId { get; set; }
 
     [JsonIgnore]
     public User? DeletedBy { get; set; }
+
+    [JsonIgnore]
+    public Sprint? Sprint { get; set; }
 
     [JsonIgnore]
     public ICollection<TaskActivityLog> ActivityLogs { get; set; } = [];

@@ -225,6 +225,7 @@ builder.Services.AddScoped<ISearchService, SearchService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<ISlaPerformanceService, SlaPerformanceService>();
+builder.Services.AddScoped<ISprintService, SprintService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();

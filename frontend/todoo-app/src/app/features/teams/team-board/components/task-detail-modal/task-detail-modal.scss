@@ -33,6 +33,12 @@
 }
 
 // ---- Task detail modal (Jira-style) ----
+.modal-backdrop.is-side-panel {
+  place-items: stretch end;
+  padding: 0;
+  background: rgba(9, 30, 66, 0.28);
+}
+
 .modal-card.jira-detail-card {
   width: 100%;
   max-width: min(1200px, 94vw);
@@ -41,6 +47,50 @@
   display: flex;
   flex-direction: column;
   max-height: 92vh;
+
+  &.is-side-panel {
+    width: min(560px, 100vw);
+    max-width: min(560px, 100vw);
+    max-height: 100vh;
+    height: 100vh;
+    border-radius: 0;
+    border-right: none;
+    box-shadow: -8px 0 28px rgba(9, 30, 66, 0.16);
+
+    .jira-issue-layout {
+      display: flex;
+      flex-direction: column;
+      grid-template-columns: none;
+      min-height: 0;
+      max-height: calc(100vh - 62px);
+      overflow-y: auto;
+    }
+
+    .jira-issue-main {
+      overflow: visible;
+      max-height: none;
+    }
+
+    .jira-issue-sidebar {
+      flex: none;
+      border-left: none;
+      border-top: 1px solid var(--border-soft);
+      overflow: visible;
+    }
+
+    .jira-sidebar-fold {
+      flex: none;
+      min-height: auto;
+    }
+
+    .jira-sidebar-footer {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      padding-bottom: 0.25rem;
+      position: relative;
+      z-index: 1;
+    }
+  }
 
   .modal-header {
     margin: 0;

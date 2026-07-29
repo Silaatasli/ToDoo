@@ -10,5 +10,9 @@ public class TeamBoardDto
 
     public string BoardName { get; set; } = string.Empty;
 
+    public int? ActiveSprintId { get; set; }
+
+    public string? ActiveSprintName { get; set; }
+
     public List<TeamBoardColumnWithTasksDto> Columns { get; set; } = [];
 }

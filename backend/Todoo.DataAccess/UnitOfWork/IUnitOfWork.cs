@@ -17,5 +17,7 @@ public interface IUnitOfWork
     IRepository<TaskComment> TaskComments { get; }
     IRepository<CommentAttachment> CommentAttachments { get; }
     IRepository<TeamAnnouncement> TeamAnnouncements { get; }
+    IRepository<Sprint> Sprints { get; }
+    IRepository<SprintActivityLog> SprintActivityLogs { get; }
     Task<int> SaveChangesAsync();
 }

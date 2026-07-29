@@ -1,24 +1,459 @@
 <app-layout>
   <app-team-workspace-shell
     [teamId]="teamId()"
-    [teamName]="team()?.name ?? 'Takım'"
+    [teamName]="kapsam()?.teamName ?? team()?.name ?? 'Takım'"
     activeTab="kapsam"
+    [showMembersButton]="false"
   >
     <main class="kapsam-page">
+      <header class="kapsam-toolbar">
+        <div class="board-picker">
+          <label for="kapsam-board">Pano</label>
+          <select
+            id="kapsam-board"
+            [value]="boardId() ?? ''"
+            (change)="selectBoard(+$any($event.target).value)"
+          >
+            @for (board of boards(); track board.id) {
+              <option [value]="board.id">{{ board.name }}</option>
+            }
+          </select>
+        </div>
+        <button type="button" class="primary-btn" (click)="openCreateModal()" [disabled]="!boardId()">
+          + Yeni sprint
+        </button>
+      </header>
+
+      @if (actionError()) {
+        <p class="inline-error">{{ actionError() }}</p>
+      }
+
       @if (loading()) {
         <div class="state-box">Kapsam yükleniyor...</div>
       } @else if (error()) {
         <div class="state-box error">{{ error() }}</div>
-      } @else {
-        <section class="kapsam-placeholder">
-          <h2>Kapsam</h2>
-          <p>
-            Backlog ve planlanmış sprintler burada listelenecek. Görevleri sprint’e taşıyıp
-            sıralayabileceksin.
-          </p>
-          <p class="hint">Sprint modülü henüz aktif değil — yakında eklenecek.</p>
+      } @else if (kapsam(); as data) {
+        <section class="accordion-list" cdkDropListGroup>
+          @for (sprint of visibleSprints(); track sprint.id) {
+            <article class="accordion" [class.is-active]="isActive(sprint)">
+              <button type="button" class="accordion-head" (click)="toggleSprint(sprint.id)">
+                <span class="chevron" [class.open]="isSprintExpanded(sprint.id)">▸</span>
+                <span class="accordion-title">{{ sprint.name }}</span>
+                <span class="status-pill" [attr.data-status]="sprint.status">{{ statusLabel(sprint.status) }}</span>
+                <span class="count">{{ tasksForSprint(sprint.id).length }}</span>
+              </button>
+
+              @if (isSprintExpanded(sprint.id)) {
+                <div class="sprint-meta">
+                  @if (sprint.goal) {
+                    <p class="goal">{{ sprint.goal }}</p>
+                  }
+                  <p class="dates">
+                    {{ sprint.plannedStartDate | date: 'dd MMM yyyy' }}
+                    –
+                    {{ sprint.plannedEndDate | date: 'dd MMM yyyy' }}
+                    · {{ sprint.completedTaskCount }}/{{ sprint.taskCount }} tamamlandı
+                  </p>
+                  <div class="sprint-actions">
+                    @if (canEditSprint(sprint)) {
+                      <button
+                        type="button"
+                        class="secondary-btn"
+                        (click)="openEditModal(sprint, $event)"
+                        [disabled]="busy()"
+                      >
+                        Düzenle
+                      </button>
+                    }
+                    @if (isPlanned(sprint)) {
+                      <button
+                        type="button"
+                        class="secondary-btn"
+                        (click)="startSprint(sprint, $event)"
+                        [disabled]="busy() || tasksForSprint(sprint.id).length === 0"
+                        title="En az bir görev gerekir"
+                      >
+                        Sprinti başlat
+                      </button>
+                      <button
+                        type="button"
+                        class="danger-btn"
+                        (click)="deleteSprint(sprint, $event)"
+                        [disabled]="busy()"
+                      >
+                        Sil
+                      </button>
+                    }
+                    @if (isActive(sprint)) {
+                      <button
+                        type="button"
+                        class="primary-btn"
+                        (click)="openCompleteModal(sprint, $event)"
+                        [disabled]="busy()"
+                      >
+                        Sprinti tamamla
+                      </button>
+                      <button
+                        type="button"
+                        class="danger-btn"
+                        (click)="openCancelModal(sprint, $event)"
+                        [disabled]="busy()"
+                      >
+                        İptal et
+                      </button>
+                    }
+                  </div>
+                </div>
+
+                <div
+                  class="accordion-body drop-zone"
+                  cdkDropList
+                  [cdkDropListData]="tasksForSprint(sprint.id)"
+                  [cdkDropListDisabled]="isCompleted(sprint)"
+                  (cdkDropListDropped)="onDrop($event, $any('sprint-' + sprint.id))"
+                >
+                  @for (task of tasksForSprint(sprint.id); track task.id) {
+                    <div
+                      class="task-row"
+                      [class.selected]="openTaskId() === task.id"
+                      cdkDrag
+                      [cdkDragData]="task"
+                      [cdkDragDisabled]="isCompleted(sprint) || busy()"
+                      (cdkDragStarted)="onTaskDragStarted()"
+                      (cdkDragMoved)="onTaskDragMoved()"
+                      (cdkDragEnded)="onTaskDragEnded()"
+                      (click)="openTaskDetail(task, $event)"
+                    >
+                      <div class="task-main">
+                        <strong>{{ task.title }}</strong>
+                        @if (task.boardColumnTitle) {
+                          <span class="meta">{{ task.boardColumnTitle }}</span>
+                        }
+                      </div>
+                      @if (task.isCompleted) {
+                        <span class="badge done">Tamamlandı</span>
+                      }
+                    </div>
+                  } @empty {
+                    <p class="empty">Görevi buraya sürükleyin</p>
+                  }
+                </div>
+              }
+            </article>
+          }
+
+          <article class="accordion">
+            <button type="button" class="accordion-head" (click)="toggleBacklog()">
+              <span class="chevron" [class.open]="backlogExpanded()">▸</span>
+              <span class="accordion-title">Backlog</span>
+              <span class="count">{{ backlogList.length }}</span>
+            </button>
+
+            @if (backlogExpanded()) {
+              <div
+                class="accordion-body drop-zone"
+                cdkDropList
+                [cdkDropListData]="backlogList"
+                (cdkDropListDropped)="onDrop($event, 'backlog')"
+              >
+                @for (task of backlogList; track task.id) {
+                  <div
+                    class="task-row"
+                    [class.selected]="openTaskId() === task.id"
+                    cdkDrag
+                    [cdkDragData]="task"
+                    [cdkDragDisabled]="busy()"
+                    (cdkDragStarted)="onTaskDragStarted()"
+                    (cdkDragMoved)="onTaskDragMoved()"
+                    (cdkDragEnded)="onTaskDragEnded()"
+                    (click)="openTaskDetail(task, $event)"
+                  >
+                    <div class="task-main">
+                      <strong>{{ task.title }}</strong>
+                      @if (task.assignedToEmail) {
+                        <span class="meta">{{ task.assignedToEmail }}</span>
+                      }
+                    </div>
+                    @if (task.isCompleted) {
+                      <span class="badge done">Tamamlandı</span>
+                    }
+                  </div>
+                } @empty {
+                  <p class="empty">Görevi buraya sürükleyin</p>
+                }
+              </div>
+            }
+          </article>
         </section>
       }
     </main>
   </app-team-workspace-shell>
 </app-layout>
+
+@if (showCreateModal()) {
+  <div class="modal-backdrop" (click)="closeCreateModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Yeni sprint</h2>
+        <button type="button" class="icon-btn" (click)="closeCreateModal()" aria-label="Kapat">×</button>
+      </header>
+      <form class="modal-form" [formGroup]="createForm" (ngSubmit)="submitCreate()">
+        <label>
+          <span>Sprint adı</span>
+          <input type="text" formControlName="name" maxlength="200" placeholder="Örn. Sprint 14" />
+        </label>
+        <label>
+          <span>Hedef (opsiyonel)</span>
+          <textarea formControlName="goal" rows="3" maxlength="1000" placeholder="Bu sprintte neyi bitireceğiz?"></textarea>
+        </label>
+        <div class="date-row">
+          <label>
+            <span>Başlangıç</span>
+            <input type="date" formControlName="plannedStartDate" />
+          </label>
+          <label>
+            <span>Bitiş</span>
+            <input type="date" formControlName="plannedEndDate" />
+          </label>
+        </div>
+        <p class="hint">Süre 1–4 hafta arasında olmalıdır.</p>
+        @if (actionError()) {
+          <p class="inline-error">{{ actionError() }}</p>
+        }
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeCreateModal()">İptal</button>
+          <button type="submit" class="primary-btn" [disabled]="busy() || createForm.invalid">
+            {{ busy() ? 'Kaydediliyor...' : 'Oluştur' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (showEditModal() && editingSprint(); as sprint) {
+  <div class="modal-backdrop" (click)="closeEditModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Sprinti düzenle</h2>
+        <button type="button" class="icon-btn" (click)="closeEditModal()" aria-label="Kapat">×</button>
+      </header>
+      <form class="modal-form" [formGroup]="editForm" (ngSubmit)="submitEdit()">
+        <label>
+          <span>Sprint adı</span>
+          <input type="text" formControlName="name" maxlength="200" />
+        </label>
+        <label>
+          <span>Hedef (opsiyonel)</span>
+          <textarea formControlName="goal" rows="3" maxlength="1000"></textarea>
+        </label>
+        <div class="date-row">
+          <label>
+            <span>Başlangıç</span>
+            <input type="date" formControlName="plannedStartDate" />
+          </label>
+          <label>
+            <span>Bitiş</span>
+            <input type="date" formControlName="plannedEndDate" />
+          </label>
+        </div>
+        <p class="hint">Süre 1–4 hafta arasında olmalıdır.</p>
+        @if (actionError()) {
+          <p class="inline-error">{{ actionError() }}</p>
+        }
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeEditModal()">Vazgeç</button>
+          <button type="submit" class="primary-btn" [disabled]="busy() || editForm.invalid">
+            {{ busy() ? 'Kaydediliyor...' : 'Kaydet' }}
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+}
+
+@if (showStartBlockedModal()) {
+  <div class="modal-backdrop" (click)="closeStartBlockedModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Aktif sprint var</h2>
+        <button type="button" class="icon-btn" (click)="closeStartBlockedModal()" aria-label="Kapat">×</button>
+      </header>
+      <div class="modal-form">
+        <p>
+          @if (startBlockedActiveName(); as activeName) {
+            Bu panoda zaten aktif bir sprint var:
+            <strong>{{ activeName }}</strong>.
+          } @else {
+            Bu panoda zaten aktif bir sprint var.
+          }
+          Yeni bir sprint başlatmak için önce aktif sprinti tamamlayın veya iptal edin.
+        </p>
+        <div class="modal-actions">
+          <button type="button" class="primary-btn" (click)="closeStartBlockedModal()">Anladım</button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
+@if (showCompleteModal() && completingSprint(); as sprint) {
+  <div class="modal-backdrop" (click)="closeCompleteModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Sprinti tamamla</h2>
+        <button type="button" class="icon-btn" (click)="closeCompleteModal()" aria-label="Kapat">×</button>
+      </header>
+      <div class="modal-form">
+        <p>
+          <strong>{{ sprint.name }}</strong> kapatılacak.
+          Tamamlanan görevler sprintte kalır.
+        </p>
+
+        @if (completeIncompleteCount() === 0) {
+          <p class="hint">Tamamlanmayan görev yok. Sprint doğrudan kapatılacak.</p>
+        } @else {
+          <p class="hint">
+            Tamamlanmayan {{ completeIncompleteCount() }} görev nereye taşınsın?
+          </p>
+
+          <label class="radio-row">
+            <input
+              type="radio"
+              name="completeDest"
+              [checked]="completeDestination() === 'backlog'"
+              (change)="setCompleteDestination('backlog')"
+            />
+            <span>Backlog’a taşı</span>
+          </label>
+
+          <label class="radio-row">
+            <input
+              type="radio"
+              name="completeDest"
+              [checked]="completeDestination() === 'sprint'"
+              (change)="setCompleteDestination('sprint')"
+              [disabled]="targetSprintsFor(sprint.id).length === 0"
+            />
+            <span>Başka bir planlanmış sprint’e taşı</span>
+          </label>
+
+          @if (targetSprintsFor(sprint.id).length === 0) {
+            <p class="hint">Başka sprint yok. Önce “+ Yeni sprint” ile planlanmış bir sprint oluştur.</p>
+          }
+
+          @if (completeDestination() === 'sprint' && targetSprintsFor(sprint.id).length > 0) {
+            <label>
+              <span>Hedef sprint</span>
+              <select
+                [value]="completeTargetSprintId() ?? ''"
+                (change)="onCompleteTargetChange($event)"
+              >
+                <option value="" disabled>Sprint seçin</option>
+                @for (item of targetSprintsFor(sprint.id); track item.id) {
+                  <option [value]="item.id">{{ item.name }}</option>
+                }
+              </select>
+            </label>
+          }
+        }
+
+        @if (actionError()) {
+          <p class="inline-error">{{ actionError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeCompleteModal()">Vazgeç</button>
+          <button type="button" class="primary-btn" (click)="submitComplete()" [disabled]="busy()">
+            {{ busy() ? 'Tamamlanıyor...' : 'Tamamla' }}
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
+@if (showCancelModal() && cancellingSprint(); as sprint) {
+  <div class="modal-backdrop" (click)="closeCancelModal()">
+    <section class="modal-card" (click)="$event.stopPropagation()">
+      <header class="modal-header">
+        <h2>Sprinti iptal et</h2>
+        <button type="button" class="icon-btn" (click)="closeCancelModal()" aria-label="Kapat">×</button>
+      </header>
+      <div class="modal-form">
+        <p>
+          <strong>{{ sprint.name }}</strong> iptal edilecek.
+          Sprintteki tüm görevlerin nereye taşınacağını seç.
+        </p>
+
+        <label class="radio-row">
+          <input
+            type="radio"
+            name="cancelDest"
+            [checked]="cancelDestination() === 'backlog'"
+            (change)="setCancelDestination('backlog')"
+          />
+          <span>Backlog’a taşı</span>
+        </label>
+
+        <label class="radio-row">
+          <input
+            type="radio"
+            name="cancelDest"
+            [checked]="cancelDestination() === 'sprint'"
+            (change)="setCancelDestination('sprint')"
+            [disabled]="targetSprintsFor(sprint.id).length === 0"
+          />
+          <span>Başka bir planlanmış sprint’e taşı</span>
+        </label>
+
+        @if (targetSprintsFor(sprint.id).length === 0) {
+          <p class="hint">Başka sprint yok. Önce planlanmış bir sprint oluştur veya backlog’a taşı.</p>
+        }
+
+        @if (cancelDestination() === 'sprint' && targetSprintsFor(sprint.id).length > 0) {
+          <label>
+            <span>Hedef sprint</span>
+            <select
+              [value]="cancelTargetSprintId() ?? ''"
+              (change)="onCancelTargetChange($event)"
+            >
+              <option value="" disabled>Sprint seçin</option>
+              @for (item of targetSprintsFor(sprint.id); track item.id) {
+                <option [value]="item.id">{{ item.name }}</option>
+              }
+            </select>
+          </label>
+        }
+
+        @if (actionError()) {
+          <p class="inline-error">{{ actionError() }}</p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary-btn" (click)="closeCancelModal()">Vazgeç</button>
+          <button type="button" class="danger-btn" (click)="submitCancel()" [disabled]="busy()">
+            {{ busy() ? 'İptal ediliyor...' : 'Sprinti iptal et' }}
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+}
+
+@if (openTaskId(); as taskId) {
+  <app-task-detail-modal
+    [taskId]="taskId"
+    presentation="panel"
+    [boardName]="board()?.boardName ?? kapsam()?.boardName ?? 'Pano'"
+    [boardColumns]="boardColumns()"
+    [categories]="categories()"
+    [members]="team()?.members ?? []"
+    [isLeader]="isLeader()"
+    [photoUrlFn]="memberPhotoUrlFn"
+    (closed)="closeTaskDetail()"
+    (changed)="onTaskDetailChanged()"
+    (navigateToTask)="openTaskId.set($event)"
+    (categoryCreated)="onCategoryCreated($event)"
+  />
+}
