@@ -88,3 +88,26 @@ There is no separate admin panel. Access is based on **team leader** vs **team m
 | Email | SendGrid |
 
 ## Project structure
+
+    backend/            ASP.NET Core API (WebApi, Business, DataAccess, Entities)
+    frontend/todoo-app  Angular app
+    docker-compose.opensearch.yml
+
+## Run locally
+
+Need: .NET 10 SDK, Node.js, SQL Server (`localhost\SQLEXPRESS`), Redis, MinIO, RabbitMQ. Docker is optional (OpenSearch).
+
+Settings: `backend/Todoo.WebApi/appsettings.json` and `appsettings.Development.json`.
+
+    docker compose -f docker-compose.opensearch.yml up -d
+
+    cd backend/Todoo.WebApi
+    dotnet run
+
+API: `http://localhost:5011` (migrations run on startup)
+
+    cd frontend/todoo-app
+    npm install
+    npm start
+
+App: `http://localhost:4200`
